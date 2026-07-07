@@ -90,7 +90,10 @@
       <h2>Sesión de conteo</h2>
       <div class="row">
         <div><label>Contador</label><input id="usuario" placeholder="Tu nombre"></div>
-        <div><label>Zona</label><select id="zona"></select></div>
+        <div><label>Zona (elige o escribe una nueva)</label>
+          <input id="zona" list="zonasDl" placeholder="Ej: Bodega 2, Piso 3…" autocomplete="off">
+          <datalist id="zonasDl"></datalist>
+        </div>
       </div>
       <label>¿Qué conteo estás haciendo? <span style="color:var(--warn)">(los conteos son ciegos)</span></label>
       <div class="seg" id="segConteo">
@@ -109,6 +112,8 @@
       <div id="selItem" class="hide" style="margin-top:10px">
         <b id="selNombre"></b><br><small id="selCodigo" style="color:var(--mut)"></small>
       </div>
+      <label>Posición del insumo (estante / rack / nivel…)</label>
+      <input id="posicion" placeholder="Ej: Rack 3 · Nivel 2 · Caja B" autocomplete="off">
     </div>
 
     <div class="card" id="cardCaptura">
@@ -118,6 +123,8 @@
       <button class="btn sec" id="btnCam">📷 Escanear con cámara</button>
       <button class="btn sec" id="btnFoto">📸 Escanear por foto</button>
       <input type="file" id="fotoScan" accept="image/*" capture="environment" class="hide">
+      <button class="btn sec" id="btnFotoReg">🖼 Foto de registro del insumo <span id="fotoCount"></span></button>
+      <input type="file" id="fotoReg" accept="image/*" capture="environment" class="hide">
       <div id="lector" class="hide"></div>
       <div class="big" id="contador">0</div>
       <p style="text-align:center;color:var(--mut);font-size:12px;margin:0">unidades en esta sesión</p>
@@ -280,11 +287,12 @@ function iniciar(){
   gs('getBootstrap').then(function(b){
     BOOT=b; MAESTRO=b.maestro.items||[];
     $('subt').textContent = MAESTRO.length+' artículos en maestro · conectado';
-    var zs=$('zona'); var pz=$('pendZona');
-    zs.innerHTML=''; pz.innerHTML='<option value="">Todas las zonas</option>';
+    var dl=$('zonasDl'); var pz=$('pendZona');
+    dl.innerHTML=''; pz.innerHTML='<option value="">Todas las zonas</option>';
     (b.zonas||[]).forEach(function(z){
-      zs.appendChild(new Option(z,z)); pz.appendChild(new Option(z,z));
+      dl.appendChild(new Option(z,z)); pz.appendChild(new Option(z,z));
     });
+    $('zona').value = localStorage.getItem('ogua_zona')||'';
     $('zonasList').textContent=(b.zonas||[]).join(' · ');
     $('usuario').value = localStorage.getItem('ogua_user')||'';
     $('conUrl').value=API.url; $('conTok').value=API.token;
@@ -364,7 +372,7 @@ autocompletar('movBuscar','movOpts',function(it){ movSel=it; });
 
 function seleccionarItem(it){
   if(macsSesion.length||manualSesion){ if(!confirm('Tienes capturas sin guardar. ¿Descartar?')) return; }
-  sel=it; macsSesion=[]; manualSesion=0; pintarCaptura();
+  sel=it; macsSesion=[]; manualSesion=0; fotosItem=0; pintarFotoCount(); pintarCaptura();
   $('selItem').classList.remove('hide');
   $('selNombre').textContent=it.n;
   $('selCodigo').textContent=(it.c?('Código: '+it.c):'')+(it.b?(' · Barras: '+it.b):'');
@@ -433,6 +441,42 @@ $('fotoScan').addEventListener('change',function(){
   }).finally(function(){ try{esc.clear();}catch(e){} });
 });
 
+// ---- foto de registro del insumo ----
+var fotosItem=0;
+function pintarFotoCount(){ $('fotoCount').textContent = fotosItem?('('+fotosItem+')'):''; }
+function comprimirFoto(file){
+  return new Promise(function(res,rej){
+    var img=new Image(); var url=URL.createObjectURL(file);
+    img.onload=function(){
+      var max=1200, esc=Math.min(1, max/Math.max(img.width,img.height));
+      var cv=document.createElement('canvas');
+      cv.width=Math.round(img.width*esc); cv.height=Math.round(img.height*esc);
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      URL.revokeObjectURL(url);
+      res(cv.toDataURL('image/jpeg',0.72));
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error('No pude leer la imagen')); };
+    img.src=url;
+  });
+}
+$('btnFotoReg').onclick=function(){
+  if(!sel){toast('Primero selecciona el artículo',true);return;}
+  $('fotoReg').value=''; $('fotoReg').click();
+};
+$('fotoReg').addEventListener('change',function(){
+  var f=this.files&&this.files[0];
+  if(!f) return;
+  toast('Subiendo foto…');
+  comprimirFoto(f).then(function(dataUrl){
+    return gs('guardarFoto',{
+      zona:$('zona').value.trim(), codigo:sel?sel.c:'', nombre:sel?sel.n:'',
+      numConteo:numConteo, posicion:$('posicion').value.trim(),
+      usuario:$('usuario').value.trim(), base64:dataUrl.split(',')[1]
+    });
+  }).then(function(){ fotosItem++; pintarFotoCount(); toast('Foto guardada en Drive ✅'); beep(660); })
+    .catch(function(e){ toast('Foto: '+String(e.message||e),true); });
+});
+
 // ---- captura: manual ----
 $('btnSumar').onclick=function(){
   var n=Number($('cantManual').value);
@@ -456,16 +500,19 @@ $('btnGuardar').onclick=function(){
   if(!sel){toast('Selecciona un artículo',true);return;}
   var total=macsSesion.length+manualSesion;
   if(!total){toast('No hay unidades capturadas',true);return;}
-  var zona=$('zona').value;
+  var zona=$('zona').value.trim();
+  if(!zona){toast('Escribe o elige la zona',true);return;}
+  localStorage.setItem('ogua_zona',zona);
+  var posicion=$('posicion').value.trim();
   var btn=$('btnGuardar'); btn.disabled=true; btn.textContent='Guardando…';
   var ops=[];
-  if(macsSesion.length) ops.push(gs('registrarConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'mac',macs:macsSesion,usuario:usuario}));
-  if(manualSesion) ops.push(gs('registrarConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'manual',cantidad:manualSesion,usuario:usuario}));
+  if(macsSesion.length) ops.push(gs('registrarConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'mac',macs:macsSesion,usuario:usuario,posicion:posicion}));
+  if(manualSesion) ops.push(gs('registrarConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'manual',cantidad:manualSesion,usuario:usuario,posicion:posicion}));
   Promise.all(ops).then(function(rs){
     var dup=0; rs.forEach(function(r){ if(r.duplicadas) dup+=r.duplicadas.length; });
     toast('Conteo '+numConteo+' guardado: '+sel.n+(dup?(' · '+dup+' MAC ya registradas fueron ignoradas'):''));
-    macsSesion=[]; manualSesion=0; sel=null;
-    $('selItem').classList.add('hide'); $('buscar').value=''; pintarCaptura(); pararCamara();
+    macsSesion=[]; manualSesion=0; sel=null; fotosItem=0; pintarFotoCount();
+    $('selItem').classList.add('hide'); $('buscar').value=''; $('posicion').value=''; pintarCaptura(); pararCamara();
   }).catch(function(e){ toast(String(e.message||e),true); })
     .finally(function(){ btn.disabled=false; btn.textContent='✅ Guardar conteo'; });
 };
