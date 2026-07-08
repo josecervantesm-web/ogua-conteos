@@ -126,6 +126,7 @@
       </div>
       <div id="selItem" class="hide" style="margin-top:10px">
         <b id="selNombre"></b><br><small id="selCodigo" style="color:var(--mut)"></small>
+        <div id="avance" class="hide" style="margin-top:6px;font-size:12px;color:var(--warn)"></div>
       </div>
       <label>Posición del insumo (estante / rack / nivel…)</label>
       <input id="posicion" placeholder="Ej: Rack 3 · Nivel 2 · Caja B" autocomplete="off">
@@ -346,6 +347,7 @@ function iniciar(){
     $('usuario').value = localStorage.getItem('ogua_user')||'';
     $('conUrl').value=API.url; $('conTok').value=API.token;
     pintarEtList();
+    restaurarSesion();
     if(b.errorMaestro) toast('Maestro: '+b.errorMaestro,true);
   }).catch(function(e){
     $('subt').textContent='Sin conexión';
@@ -388,13 +390,63 @@ document.querySelectorAll('.tabs button').forEach(function(btn){
 });
 
 // ---- selector de conteo 1/2/3 ----
+function setNumConteo(n){
+  numConteo=Number(n)||1;
+  document.querySelectorAll('#segConteo button').forEach(function(x){
+    x.classList.toggle('on',Number(x.dataset.n)===numConteo);
+  });
+}
 document.querySelectorAll('#segConteo button').forEach(function(b){
   b.onclick=function(){
-    document.querySelectorAll('#segConteo button').forEach(function(x){x.classList.remove('on');});
-    b.classList.add('on'); numConteo=Number(b.dataset.n);
+    setNumConteo(b.dataset.n);
     if(numConteo===3) toast('El 3er conteo solo aplica a ítems donde 1 y 2 difieren');
+    cargarAvance();
   };
 });
+$('zona').addEventListener('change',function(){ if(sel) cargarAvance(); });
+
+// ---- avance del conteo actual (para reanudar) ----
+function cargarAvance(){
+  var av=$('avance');
+  if(!sel){ av.classList.add('hide'); return; }
+  var zona=$('zona').value.trim();
+  if(!zona){ av.classList.add('hide'); return; }
+  av.textContent='Consultando avance…'; av.classList.remove('hide');
+  gs('getAvanceConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo}).then(function(r){
+    av.textContent = r.cantidad>0
+      ? '⏯ Conteo '+numConteo+' en esta zona ya tiene '+r.cantidad+' unidades guardadas — las nuevas se suman.'
+      : 'Sin registros previos en el conteo '+numConteo+' de esta zona.';
+  }).catch(function(){ av.classList.add('hide'); });
+}
+
+// ---- sesión local (recuperar capturas sin guardar) ----
+function persistirSesion(){
+  try{
+    if(sel && (macsSesion.length||manualSesion)){
+      localStorage.setItem('ogua_sesion',JSON.stringify({
+        sel:sel,macs:macsSesion,manual:manualSesion,
+        zona:$('zona').value,num:numConteo,pos:$('posicion').value
+      }));
+    } else localStorage.removeItem('ogua_sesion');
+  }catch(e){}
+}
+function restaurarSesion(){
+  var s=null;
+  try{ s=JSON.parse(localStorage.getItem('ogua_sesion')||'null'); }catch(e){}
+  if(!s||!s.sel||!((s.macs||[]).length||s.manual)) return;
+  var total=(s.macs||[]).length+(s.manual||0);
+  if(!confirm('Hay una sesión sin guardar: "'+s.sel.n+'" con '+total+' unidades (conteo '+s.num+', '+(s.zona||'sin zona')+'). ¿Reanudarla?')){
+    localStorage.removeItem('ogua_sesion'); return;
+  }
+  sel=s.sel; macsSesion=s.macs||[]; manualSesion=s.manual||0;
+  $('zona').value=s.zona||''; $('posicion').value=s.pos||'';
+  setNumConteo(s.num||1);
+  $('selItem').classList.remove('hide');
+  $('selNombre').textContent=sel.n;
+  $('selCodigo').textContent=(sel.c?('Código: '+sel.c):'')+(sel.b?(' · Barras: '+sel.b):'');
+  pintarCaptura(); cargarAvance();
+  toast('Sesión recuperada: revisa y continúa bipeando');
+}
 
 // ---- búsqueda de artículo ----
 function autocompletar(inputId,optsId,onPick){
@@ -427,6 +479,7 @@ function seleccionarItem(it){
   $('selNombre').textContent=it.n;
   $('selCodigo').textContent=(it.c?('Código: '+it.c):'')+(it.b?(' · Barras: '+it.b):'');
   $('scan').focus();
+  cargarAvance();
 }
 
 // ---- captura: pistola / teclado ----
@@ -540,6 +593,7 @@ function pintarCaptura(){
   $('macs').innerHTML = macsSesion.map(function(m){
     return '<span class="macchip">'+m.replace(/(..)(?=.)/g,'$1:')+'</span>';
   }).join('');
+  persistirSesion();
 }
 
 // ---- etiqueta QR + código de barras (Zebra) ----
@@ -679,22 +733,45 @@ $('btnGuardar').onclick=function(){
     .finally(function(){ btn.disabled=false; btn.textContent='✅ Guardar conteo'; });
 };
 
-// ---- pendientes (vista ciega) ----
+// ---- pendientes (vista ciega) + reanudar ----
+var PEND=[];
 function cargarPendientes(){
   $('pendList').innerHTML='<div class="item">Cargando…</div>';
   gs('getPendientes',$('pendZona').value).then(function(list){
+    PEND=list;
     if(!list.length){$('pendList').innerHTML='<div class="item">Aún no hay conteos</div>';return;}
-    $('pendList').innerHTML=list.map(function(it){
+    $('pendList').innerHTML=list.map(function(it,i){
       var pill = it.estado==='CERRADO' ? '<span class="pill p-ok">Cerrado</span>'
         : it.estado==='REQUIERE_3' ? '<span class="pill p-warn">Requiere 3er</span>'
         : it.estado==='REVISION' ? '<span class="pill p-err">Revisión</span>'
         : '<span class="pill p-mut">En proceso</span>';
       var checks=(it.hecho1?'①':'')+(it.hecho2?'②':'')+(it.hecho3?'③':'');
-      return '<div class="item"><div>'+it.nombre+'<small>'+it.zona+' · conteos: '+(checks||'—')+'</small></div>'+pill+'</div>';
+      return '<div class="item" style="cursor:pointer" onclick="reanudarItem('+i+')"><div>'+it.nombre
+        +'<small>'+it.zona+' · conteos: '+(checks||'—')+' · ▶ toca para reanudar</small></div>'+pill+'</div>';
     }).join('');
   }).catch(function(e){toast(String(e.message||e),true);});
 }
 $('pendZona').onchange=cargarPendientes;
+function reanudarItem(i){
+  var it=PEND[i]; if(!it) return;
+  if(it.estado==='CERRADO' && !confirm('Este ítem ya está CERRADO. ¿Agregar más unidades de todas formas?')) return;
+  if(macsSesion.length||manualSesion){
+    if(!confirm('Tienes capturas sin guardar. ¿Descartarlas?')) return;
+    macsSesion=[]; manualSesion=0;
+  }
+  var m=null, n=norm(it.nombre);
+  for(var k=0;k<MAESTRO.length;k++){
+    var x=MAESTRO[k];
+    if((it.codigo&&String(x.c)===String(it.codigo))||norm(x.n)===n){ m=x; break; }
+  }
+  if(!m) m={c:it.codigo||'',n:it.nombre,b:''};
+  $('zona').value=it.zona;
+  var sug = it.estado==='REQUIERE_3' ? 3 : (!it.hecho1 ? 1 : (!it.hecho2 ? 2 : numConteo));
+  setNumConteo(sug);
+  document.querySelector('.tabs button[data-v="conteo"]').click();
+  seleccionarItem(m);
+  toast('Reanudando '+it.nombre+' · conteo '+sug);
+}
 
 // ---- comparativo ----
 var COMP=[];
