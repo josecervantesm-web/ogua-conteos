@@ -53,6 +53,7 @@
   #lector{width:100%;border-radius:12px;overflow:hidden;margin-top:8px}
   .hide{display:none !important}
   .macchip{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:3px 8px;margin:3px 3px 0 0;font-size:11.5px;font-family:monospace}
+  .macchip.saved{border-color:var(--ok);color:var(--ok)}
   .seg{display:flex;background:var(--card2);border-radius:11px;padding:4px;gap:4px;margin-top:4px}
   .seg button{flex:1;border:0;border-radius:8px;background:none;color:var(--mut);padding:9px 4px;font-size:13px;font-weight:700;cursor:pointer}
   .seg button.on{background:var(--acc);color:#fff}
@@ -143,14 +144,18 @@
       <input type="file" id="fotoReg" accept="image/*" capture="environment" class="hide">
       <div id="lector" class="hide"></div>
       <div class="big" id="contador">0</div>
-      <p style="text-align:center;color:var(--mut);font-size:12px;margin:0">unidades en esta sesión</p>
+      <p id="detalleCant" style="text-align:center;color:var(--mut);font-size:12px;margin:0">0 guardadas + 0 nuevas</p>
       <div id="macs" style="margin-top:6px"></div>
       <label>…o registra cantidad manual</label>
       <div class="row">
         <input id="cantManual" type="number" min="1" inputmode="numeric" placeholder="Cantidad">
         <button class="btn sec" style="margin-top:0" id="btnSumar">＋ Sumar</button>
       </div>
-      <button class="btn ok" id="btnGuardar">✅ Guardar conteo</button>
+      <div class="row">
+        <button class="btn sec" id="btnGuardar">💾 Guardar avance</button>
+        <button class="btn ok" id="btnCerrar">✅ Guardar y cerrar</button>
+      </div>
+      <button class="btn sec hide" id="btnReabrir">🔓 Reabrir este conteo</button>
     </div>
   </section>
 
@@ -300,8 +305,11 @@ var BOOT = null;
 var MAESTRO = [];
 var sel = null;
 var movSel = null;
-var macsSesion = [];
-var manualSesion = 0;
+var macsSesion = [];   // MACs nuevas de esta sesión (sin guardar)
+var manualSesion = 0;  // cantidad manual nueva (sin guardar)
+var savedMacs = [];    // MACs ya guardadas en el conteo actual
+var savedQty = 0;      // unidades ya guardadas en el conteo actual
+var conteoCerrado = false;
 var numConteo = 1;
 var camara = null;
 
@@ -408,14 +416,24 @@ $('zona').addEventListener('change',function(){ if(sel) cargarAvance(); });
 // ---- avance del conteo actual (para reanudar) ----
 function cargarAvance(){
   var av=$('avance');
+  savedMacs=[]; savedQty=0; conteoCerrado=false;
+  $('btnReabrir').classList.add('hide');
+  pintarCaptura();
   if(!sel){ av.classList.add('hide'); return; }
   var zona=$('zona').value.trim();
   if(!zona){ av.classList.add('hide'); return; }
   av.textContent='Consultando avance…'; av.classList.remove('hide');
-  gs('getAvanceConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo}).then(function(r){
-    av.textContent = r.cantidad>0
-      ? '⏯ Conteo '+numConteo+' en esta zona ya tiene '+r.cantidad+' unidades guardadas — las nuevas se suman.'
-      : 'Sin registros previos en el conteo '+numConteo+' de esta zona.';
+  gs('getDetalleConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo}).then(function(r){
+    savedMacs=r.macs||[]; savedQty=Number(r.cantidad)||0; conteoCerrado=!!r.cerrado;
+    pintarCaptura();
+    if(conteoCerrado){
+      av.textContent='🔒 El conteo '+numConteo+' de este ítem ya está CERRADO ('+savedQty+' unidades). Reábrelo para agregar más.';
+      $('btnReabrir').classList.remove('hide');
+    } else if(savedQty>0){
+      av.textContent='⏯ Conteo '+numConteo+' reanudado: '+savedQty+' unidades ya guardadas ('+savedMacs.length+' MACs). Las nuevas se suman.';
+    } else {
+      av.textContent='Sin registros previos en el conteo '+numConteo+' de esta zona.';
+    }
   }).catch(function(){ av.classList.add('hide'); });
 }
 
@@ -495,6 +513,8 @@ function procesarScan(raw){
   var mac=esMac(raw);
   if(mac){
     if(!sel){ toast('Primero selecciona el artículo',true); beep(220); return; }
+    if(conteoCerrado){ toast('Este conteo está cerrado. Reábrelo para agregar.',true); beep(220); return; }
+    if(savedMacs.indexOf(mac)>=0){ toast('MAC ya guardada en este conteo',true); beep(220); return; }
     if(macsSesion.indexOf(mac)>=0){ toast('MAC repetida en esta sesión',true); beep(220); return; }
     macsSesion.push(mac); beep(880); pintarCaptura(); return;
   }
@@ -585,14 +605,19 @@ $('btnSumar').onclick=function(){
   var n=Number($('cantManual').value);
   if(!(n>0)){toast('Cantidad inválida',true);return;}
   if(!sel){toast('Primero selecciona el artículo',true);return;}
+  if(conteoCerrado){toast('Este conteo está cerrado. Reábrelo para agregar.',true);return;}
   manualSesion+=n; $('cantManual').value=''; pintarCaptura(); beep(880);
 };
 
 function pintarCaptura(){
-  $('contador').textContent = macsSesion.length + manualSesion;
-  $('macs').innerHTML = macsSesion.map(function(m){
+  var nuevas=macsSesion.length+manualSesion;
+  $('contador').textContent = savedQty+nuevas;
+  $('detalleCant').textContent = savedQty+' guardadas + '+nuevas+' nuevas'+(conteoCerrado?' · 🔒 CERRADO':'');
+  $('macs').innerHTML = savedMacs.map(function(m){
+    return '<span class="macchip saved">✓ '+m.replace(/(..)(?=.)/g,'$1:')+'</span>';
+  }).concat(macsSesion.map(function(m){
     return '<span class="macchip">'+m.replace(/(..)(?=.)/g,'$1:')+'</span>';
-  }).join('');
+  })).join('');
   persistirSesion();
 }
 
@@ -707,30 +732,64 @@ function generarZpl_(d,e){
 }
 
 // ---- guardar conteo ----
-$('btnGuardar').onclick=function(){
+function validarSesion(){
   var usuario=$('usuario').value.trim();
-  if(!usuario){toast('Escribe tu nombre',true);return;}
+  if(!usuario){toast('Escribe tu nombre',true);return null;}
   localStorage.setItem('ogua_user',usuario);
-  if(!sel){toast('Selecciona un artículo',true);return;}
-  var total=macsSesion.length+manualSesion;
-  if(!total){toast('No hay unidades capturadas',true);return;}
+  if(!sel){toast('Selecciona un artículo',true);return null;}
   var zona=$('zona').value.trim();
-  if(!zona){toast('Escribe o elige la zona',true);return;}
+  if(!zona){toast('Escribe o elige la zona',true);return null;}
   localStorage.setItem('ogua_zona',zona);
-  var posicion=$('posicion').value.trim();
-  var etData={fecha:new Date().toLocaleDateString('es-CO'),nombre:sel.n,codigo:sel.c,cantidad:total,numConteo:numConteo,zona:zona,posicion:posicion,usuario:usuario};
-  var btn=$('btnGuardar'); btn.disabled=true; btn.textContent='Guardando…';
+  if(conteoCerrado){toast('Este conteo está cerrado. Reábrelo primero.',true);return null;}
+  return {usuario:usuario,zona:zona,posicion:$('posicion').value.trim()};
+}
+function opsPendientes(v){
   var ops=[];
-  if(macsSesion.length) ops.push(gs('registrarConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'mac',macs:macsSesion,usuario:usuario,posicion:posicion}));
-  if(manualSesion) ops.push(gs('registrarConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'manual',cantidad:manualSesion,usuario:usuario,posicion:posicion}));
-  Promise.all(ops).then(function(rs){
-    var dup=0; rs.forEach(function(r){ if(r.duplicadas) dup+=r.duplicadas.length; });
-    toast('Conteo '+numConteo+' guardado: '+sel.n+(dup?(' · '+dup+' MAC ya registradas fueron ignoradas'):''));
-    macsSesion=[]; manualSesion=0; sel=null; fotosItem=0; pintarFotoCount();
+  if(macsSesion.length) ops.push(gs('registrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'mac',macs:macsSesion,usuario:v.usuario,posicion:v.posicion}));
+  if(manualSesion) ops.push(gs('registrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'manual',cantidad:manualSesion,usuario:v.usuario,posicion:v.posicion}));
+  return ops;
+}
+// Guardar avance: registra lo bipeado y deja el conteo abierto para seguir después
+$('btnGuardar').onclick=function(){
+  var v=validarSesion(); if(!v) return;
+  if(!(macsSesion.length+manualSesion)){toast('No hay unidades nuevas para guardar',true);return;}
+  var btn=$('btnGuardar'); btn.disabled=true; btn.textContent='Guardando…';
+  Promise.all(opsPendientes(v)).then(function(rs){
+    var acc=0,dup=0; rs.forEach(function(r){ acc+=r.aceptadas||0; if(r.duplicadas) dup+=r.duplicadas.length; });
+    macsSesion=[]; manualSesion=0;
+    toast('Avance guardado: +'+acc+' unidades. Puedes seguir o retomar luego.'+(dup?(' ('+dup+' MAC duplicadas ignoradas)'):''));
+    cargarAvance();
+  }).catch(function(e){ toast(String(e.message||e),true); })
+    .finally(function(){ btn.disabled=false; btn.textContent='💾 Guardar avance'; });
+};
+// Guardar y cerrar: registra lo pendiente y marca este conteo como terminado
+$('btnCerrar').onclick=function(){
+  var v=validarSesion(); if(!v) return;
+  var nuevas=macsSesion.length+manualSesion;
+  if(savedQty+nuevas===0 && !confirm('¿Cerrar el conteo '+numConteo+' con 0 unidades?')) return;
+  var etData={fecha:new Date().toLocaleDateString('es-CO'),nombre:sel.n,codigo:sel.c,cantidad:0,numConteo:numConteo,zona:v.zona,posicion:v.posicion,usuario:v.usuario};
+  var base=savedQty;
+  var btn=$('btnCerrar'); btn.disabled=true; btn.textContent='Cerrando…';
+  Promise.all(opsPendientes(v)).then(function(rs){
+    var acc=0; rs.forEach(function(r){ acc+=r.aceptadas||0; });
+    etData.cantidad=base+acc;
+    return gs('cerrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,usuario:v.usuario});
+  }).then(function(){
+    toast('Conteo '+numConteo+' cerrado: '+etData.nombre+' ('+etData.cantidad+' unidades)');
+    macsSesion=[]; manualSesion=0; sel=null; fotosItem=0; savedMacs=[]; savedQty=0; conteoCerrado=false; pintarFotoCount();
     $('selItem').classList.add('hide'); $('buscar').value=''; $('posicion').value=''; pintarCaptura(); pararCamara();
     try{ mostrarEtiqueta(etData); }catch(e){ toast('Etiqueta no disponible: '+String(e.message||e),true); }
   }).catch(function(e){ toast(String(e.message||e),true); })
-    .finally(function(){ btn.disabled=false; btn.textContent='✅ Guardar conteo'; });
+    .finally(function(){ btn.disabled=false; btn.textContent='✅ Guardar y cerrar'; });
+};
+// Reabrir un conteo cerrado
+$('btnReabrir').onclick=function(){
+  if(!sel) return;
+  var zona=$('zona').value.trim();
+  gs('reabrirConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo}).then(function(){
+    toast('Conteo '+numConteo+' reabierto');
+    cargarAvance();
+  }).catch(function(e){toast(String(e.message||e),true);});
 };
 
 // ---- pendientes (vista ciega) + reanudar ----
@@ -745,7 +804,9 @@ function cargarPendientes(){
         : it.estado==='REQUIERE_3' ? '<span class="pill p-warn">Requiere 3er</span>'
         : it.estado==='REVISION' ? '<span class="pill p-err">Revisión</span>'
         : '<span class="pill p-mut">En proceso</span>';
-      var checks=(it.hecho1?'①':'')+(it.hecho2?'②':'')+(it.hecho3?'③':'');
+      var checks=(it.hecho1||it.cer1?('1'+(it.cer1?'✔':'…')+' '):'')
+        +(it.hecho2||it.cer2?('2'+(it.cer2?'✔':'…')+' '):'')
+        +(it.hecho3||it.cer3?('3'+(it.cer3?'✔':'…')):'');
       return '<div class="item" style="cursor:pointer" onclick="reanudarItem('+i+')"><div>'+it.nombre
         +'<small>'+it.zona+' · conteos: '+(checks||'—')+' · ▶ toca para reanudar</small></div>'+pill+'</div>';
     }).join('');
@@ -766,7 +827,7 @@ function reanudarItem(i){
   }
   if(!m) m={c:it.codigo||'',n:it.nombre,b:''};
   $('zona').value=it.zona;
-  var sug = it.estado==='REQUIERE_3' ? 3 : (!it.hecho1 ? 1 : (!it.hecho2 ? 2 : numConteo));
+  var sug = it.estado==='REQUIERE_3' ? 3 : (!it.cer1 ? 1 : (!it.cer2 ? 2 : numConteo));
   setNumConteo(sug);
   document.querySelector('.tabs button[data-v="conteo"]').click();
   seleccionarItem(m);
