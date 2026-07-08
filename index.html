@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>OGUA Conteos</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
 <style>
   :root{
     --bg:#0f1420; --card:#1a2232; --card2:#222c42; --line:#2e3a55;
@@ -54,6 +56,19 @@
   .seg{display:flex;background:var(--card2);border-radius:11px;padding:4px;gap:4px;margin-top:4px}
   .seg button{flex:1;border:0;border-radius:8px;background:none;color:var(--mut);padding:9px 4px;font-size:13px;font-weight:700;cursor:pointer}
   .seg button.on{background:var(--acc);color:#fff}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:150;padding:16px}
+  .mcard{background:#fff;color:#111;border-radius:14px;padding:18px;max-width:360px;width:100%;text-align:center}
+  .mcard h2{color:#111}
+  #etQr{display:flex;justify-content:center;padding:10px;background:#fff}
+  #etInfo{font-size:13px;text-align:left;margin:8px auto;color:#111;line-height:1.55;max-width:280px}
+  #printLabel{display:none;background:#fff;color:#000;flex-direction:column;justify-content:space-between;padding:2mm;box-sizing:border-box;overflow:hidden}
+  #plName{font-weight:700;line-height:1.15}
+  #plInfo{line-height:1.2}
+  #plCodes{display:flex;align-items:center;gap:2mm}
+  @media print{
+    body.print-et header, body.print-et main, body.print-et nav, body.print-et .toast, body.print-et .modal{display:none !important}
+    body.print-et #printLabel{display:flex !important}
+  }
   #setup{position:fixed;inset:0;background:var(--bg);z-index:200;padding:20px;overflow:auto}
 </style>
 </head>
@@ -221,6 +236,17 @@
       <button class="btn sec" id="btnReconectar">Guardar y reconectar</button>
     </div>
     <div class="card">
+      <h2>Etiquetas de impresión (Zebra)</h2>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Tamaños disponibles al imprimir la etiqueta de conteo. Compartidos con todo el equipo.</p>
+      <div id="etList"></div>
+      <div class="row" style="margin-top:8px">
+        <input id="etNombre" placeholder="Nombre">
+        <input id="etW" type="number" min="20" inputmode="numeric" placeholder="Ancho mm">
+        <input id="etH" type="number" min="10" inputmode="numeric" placeholder="Alto mm">
+      </div>
+      <button class="btn sec" id="btnAddEt">＋ Agregar etiqueta</button>
+    </div>
+    <div class="card">
       <h2>Zonas</h2>
       <div class="row"><input id="nuevaZona" placeholder="Nueva zona…"><button class="btn sec" style="margin-top:0" id="btnZona">＋</button></div>
       <div id="zonasList" style="margin-top:8px;color:var(--mut);font-size:13px"></div>
@@ -231,6 +257,29 @@
     </p>
   </section>
 </main>
+
+<div id="etModal" class="modal hide">
+  <div class="mcard">
+    <h2 style="margin:0 0 8px;font-size:16px">🏷 Etiqueta de conteo</h2>
+    <div id="etQr"></div>
+    <svg id="etBar" style="width:100%;max-height:60px;margin-top:6px"></svg>
+    <div id="etInfo"></div>
+    <label style="color:#333;font-size:12px;text-align:left;display:block;margin:6px 0 3px">Etiqueta para imprimir</label>
+    <select id="etSize" style="background:#f4f4f4;color:#111;border:1px solid #ccc"></select>
+    <div id="etBtns">
+      <button class="btn" id="btnImprimirEt">🖨 Imprimir</button>
+      <button class="btn sec" id="btnZpl">⬇ Descargar ZPL (Zebra)</button>
+      <button class="btn sec" id="btnCerrarEt">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<style id="pageStyle"></style>
+<div id="printLabel">
+  <div id="plName"></div>
+  <div id="plInfo"></div>
+  <div id="plCodes"><img id="plQr" alt=""><svg id="plBar"></svg></div>
+</div>
 
 <nav class="tabs">
   <button data-v="conteo" class="on"><span class="ico">🔢</span>Conteo</button>
@@ -296,6 +345,7 @@ function iniciar(){
     $('zonasList').textContent=(b.zonas||[]).join(' · ');
     $('usuario').value = localStorage.getItem('ogua_user')||'';
     $('conUrl').value=API.url; $('conTok').value=API.token;
+    pintarEtList();
     if(b.errorMaestro) toast('Maestro: '+b.errorMaestro,true);
   }).catch(function(e){
     $('subt').textContent='Sin conexión';
@@ -492,6 +542,107 @@ function pintarCaptura(){
   }).join('');
 }
 
+// ---- etiqueta QR + código de barras (Zebra) ----
+var ET=null; // datos de la última etiqueta guardada
+var ET_DEF=[{n:'Mediana 10x5 cm',w:100,h:50},{n:'Grande 10x7.5 cm',w:100,h:75},{n:'Pequena 5x2.5 cm',w:50,h:25}];
+function etiquetas_(){
+  var arr=BOOT&&BOOT.config&&BOOT.config.etiquetas;
+  return (arr&&arr.length)?arr:ET_DEF;
+}
+// CSV: cantidad,nombre,zona,posicion,usuario — sin acentos ni caracteres que rompan CODE128/ZPL
+function csvEtiqueta_(d){
+  function s(v){return String(v==null?'':v).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[,\^~]/g,' ').trim();}
+  return [s(d.cantidad),s(d.nombre),s(d.zona),s(d.posicion),s(d.usuario)].join(',');
+}
+function mostrarEtiqueta(d){
+  ET=d;
+  var texto='OGUA CONTEO'
+    +'\nFecha: '+d.fecha
+    +'\nArtículo: '+d.nombre+(d.codigo?(' ('+d.codigo+')'):'')
+    +'\nCantidad: '+d.cantidad
+    +'\nConteo #: '+d.numConteo
+    +'\nZona: '+d.zona
+    +(d.posicion?('\nPosición: '+d.posicion):'')
+    +'\nContó: '+d.usuario;
+  $('etQr').innerHTML='';
+  new QRCode($('etQr'),{text:texto,width:170,height:170,correctLevel:QRCode.CorrectLevel.M});
+  try{ JsBarcode('#etBar',csvEtiqueta_(d),{format:'CODE128',displayValue:false,height:46,margin:0,width:1}); }
+  catch(e){ $('etBar').innerHTML=''; }
+  $('etInfo').innerHTML=texto.split('\n').slice(1).map(function(l){return '<div>'+l+'</div>';}).join('');
+  var selEt=$('etSize'); selEt.innerHTML='';
+  etiquetas_().forEach(function(e,i){ selEt.appendChild(new Option(e.n+' — '+e.w+'x'+e.h+' mm',i)); });
+  var last=Number(localStorage.getItem('ogua_et')||0);
+  if(last<selEt.options.length) selEt.selectedIndex=last;
+  $('etModal').classList.remove('hide');
+}
+$('btnCerrarEt').onclick=function(){ $('etModal').classList.add('hide'); };
+function etSel_(){
+  var i=$('etSize').selectedIndex; if(i<0) i=0;
+  localStorage.setItem('ogua_et',i);
+  return etiquetas_()[i]||ET_DEF[0];
+}
+$('btnImprimirEt').onclick=function(){
+  if(!ET) return;
+  var e=etSel_();
+  $('pageStyle').textContent='@page{size:'+e.w+'mm '+e.h+'mm;margin:0}';
+  var pl=$('printLabel');
+  pl.style.width=e.w+'mm'; pl.style.height=e.h+'mm';
+  var chico=e.h<40;
+  $('plName').textContent=ET.nombre;
+  $('plName').style.fontSize=chico?'8pt':'11pt';
+  $('plInfo').textContent='Cant: '+ET.cantidad+' · C'+ET.numConteo+' · '+ET.zona
+    +(ET.posicion?(' · '+ET.posicion):'')+' · '+ET.usuario+' · '+ET.fecha;
+  $('plInfo').style.fontSize=chico?'6pt':'8pt';
+  var img=$('plQr');
+  var cv=$('etQr').querySelector('canvas');
+  var q=Math.min(e.h-22,32); // lado del QR en mm
+  if(cv && !chico){
+    img.src=cv.toDataURL('image/png');
+    img.style.display='block'; img.style.width=q+'mm'; img.style.height=q+'mm';
+  } else { img.style.display='none'; }
+  try{ JsBarcode('#plBar',csvEtiqueta_(ET),{format:'CODE128',displayValue:true,fontSize:10,height:34,margin:0,width:1}); }
+  catch(err){ $('plBar').innerHTML=''; }
+  $('plBar').style.width=(chico?(e.w-6):(e.w-q-10))+'mm';
+  $('plBar').style.height=(chico?(e.h-14):Math.min(e.h-24,24))+'mm';
+  document.body.classList.add('print-et');
+  setTimeout(function(){ window.print(); document.body.classList.remove('print-et'); },80);
+};
+$('btnZpl').onclick=function(){
+  if(!ET) return;
+  var e=etSel_();
+  var blob=new Blob([generarZpl_(ET,e)],{type:'text/plain'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='etiqueta_'+String(ET.codigo||ET.nombre).replace(/[^\w-]/g,'_').slice(0,30)+'.zpl';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('ZPL descargado (203 dpi): envíalo a la Zebra');
+};
+// ZPL nativo para ZD230 (203 dpi = 8 puntos/mm)
+function generarZpl_(d,e){
+  var W=Math.round(e.w*8), H=Math.round(e.h*8);
+  var csv=csvEtiqueta_(d);
+  function t(v){return String(v==null?'':v).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[\^~]/g,' ');}
+  var chico=e.h<40;
+  var z=['^XA','^CI28','^PW'+W,'^LL'+H,'^LH0,0'];
+  var x=16;
+  if(chico){
+    z.push('^FO'+x+',8^A0N,22,22^FB'+(W-2*x)+',1,0,L^FD'+t(d.nombre)+'^FS');
+    z.push('^FO'+x+',34^A0N,18,18^FDCant: '+t(d.cantidad)+'  C'+d.numConteo+'  '+t(d.zona)+(d.posicion?('  '+t(d.posicion)):'')+'^FS');
+    z.push('^FO'+x+','+(H-92)+'^BY1,2,56^BCN,56,Y,N,N^FD'+csv+'^FS');
+  } else {
+    var qmag=e.h>=70?5:4;
+    z.push('^FO'+x+',12^BQN,2,'+qmag+'^FDLA,OGUA,'+csv+','+t(d.fecha)+'^FS');
+    var tx=x+(qmag*32)+16;
+    z.push('^FO'+tx+',16^A0N,26,26^FB'+(W-tx-10)+',2,2,L^FD'+t(d.nombre)+'^FS');
+    z.push('^FO'+tx+',78^A0N,22,22^FDCantidad: '+t(d.cantidad)+'   Conteo '+d.numConteo+'^FS');
+    z.push('^FO'+tx+',106^A0N,22,22^FD'+t(d.zona)+(d.posicion?(' - '+t(d.posicion)):'')+'^FS');
+    z.push('^FO'+tx+',134^A0N,20,20^FD'+t(d.usuario)+' - '+t(d.fecha)+'^FS');
+    z.push('^FO'+x+','+(H-104)+'^BY1,2,64^BCN,64,Y,N,N^FD'+csv+'^FS');
+  }
+  z.push('^XZ');
+  return z.join('\n');
+}
+
 // ---- guardar conteo ----
 $('btnGuardar').onclick=function(){
   var usuario=$('usuario').value.trim();
@@ -504,6 +655,7 @@ $('btnGuardar').onclick=function(){
   if(!zona){toast('Escribe o elige la zona',true);return;}
   localStorage.setItem('ogua_zona',zona);
   var posicion=$('posicion').value.trim();
+  var etData={fecha:new Date().toLocaleDateString('es-CO'),nombre:sel.n,codigo:sel.c,cantidad:total,numConteo:numConteo,zona:zona,posicion:posicion,usuario:usuario};
   var btn=$('btnGuardar'); btn.disabled=true; btn.textContent='Guardando…';
   var ops=[];
   if(macsSesion.length) ops.push(gs('registrarConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'mac',macs:macsSesion,usuario:usuario,posicion:posicion}));
@@ -511,6 +663,7 @@ $('btnGuardar').onclick=function(){
   Promise.all(ops).then(function(rs){
     var dup=0; rs.forEach(function(r){ if(r.duplicadas) dup+=r.duplicadas.length; });
     toast('Conteo '+numConteo+' guardado: '+sel.n+(dup?(' · '+dup+' MAC ya registradas fueron ignoradas'):''));
+    mostrarEtiqueta(etData);
     macsSesion=[]; manualSesion=0; sel=null; fotosItem=0; pintarFotoCount();
     $('selItem').classList.add('hide'); $('buscar').value=''; $('posicion').value=''; pintarCaptura(); pararCamara();
   }).catch(function(e){ toast(String(e.message||e),true); })
@@ -607,9 +760,34 @@ $('btnZona').onclick=function(){
   var n=$('nuevaZona').value.trim();
   if(!n){toast('Escribe el nombre de la zona',true);return;}
   gs('addZona',n).then(function(){
-    $('zona').appendChild(new Option(n,n)); $('pendZona').appendChild(new Option(n,n));
+    $('zonasDl').appendChild(new Option(n,n)); $('pendZona').appendChild(new Option(n,n));
     $('zonasList').textContent+=' · '+n; $('nuevaZona').value=''; toast('Zona agregada');
   }).catch(function(e){toast(String(e.message||e),true);});
+};
+
+// ---- config de etiquetas de impresión ----
+function pintarEtList(){
+  var arr=etiquetas_();
+  $('etList').innerHTML=arr.map(function(e,i){
+    return '<div class="item"><div>'+e.n+'<small>'+e.w+' x '+e.h+' mm</small></div>'+
+      '<b style="cursor:pointer;color:var(--err)" onclick="quitarEt('+i+')">✕</b></div>';
+  }).join('')||'<div class="item">Sin etiquetas configuradas</div>';
+}
+function guardarEtiquetas(arr){
+  gs('saveConfig',{etiquetas:JSON.stringify(arr)}).then(function(){
+    BOOT.config.etiquetas=arr; pintarEtList(); toast('Etiquetas actualizadas');
+  }).catch(function(e){toast(String(e.message||e),true);});
+}
+function quitarEt(i){
+  var arr=etiquetas_().slice(); arr.splice(i,1);
+  guardarEtiquetas(arr);
+}
+$('btnAddEt').onclick=function(){
+  var n=$('etNombre').value.trim(), w=Number($('etW').value), h=Number($('etH').value);
+  if(!n||!(w>10)||!(h>5)){toast('Completa nombre, ancho y alto en mm',true);return;}
+  var arr=etiquetas_().slice(); arr.push({n:n,w:w,h:h});
+  guardarEtiquetas(arr);
+  $('etNombre').value='';$('etW').value='';$('etH').value='';
 };
 </script>
 </body>
