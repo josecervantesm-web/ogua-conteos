@@ -521,8 +521,8 @@ function procesarScan(raw){
   var q=norm(raw);
   var hit=MAESTRO.find(function(it){ return String(it.c)===raw || (it.b&&String(it.b)===raw) || norm(it.c)===q; });
   if(hit){ seleccionarItem(hit); toast('Artículo: '+hit.n); beep(660); return; }
-  if(sel){ manualSesion++; beep(880); pintarCaptura(); toast('+1 (código no MAC)'); return; }
-  toast('Código no reconocido en el maestro',true); beep(220);
+  // código desconocido: NO se cuenta (solo MACs válidas suman)
+  toast('⚠ No es una MAC ni un código del maestro — no se contó',true); beep(220);
 }
 
 // ---- captura: cámara en vivo ----
