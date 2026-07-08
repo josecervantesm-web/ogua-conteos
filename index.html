@@ -565,7 +565,16 @@ function mostrarEtiqueta(d){
     +(d.posicion?('\nPosición: '+d.posicion):'')
     +'\nContó: '+d.usuario;
   $('etQr').innerHTML='';
-  new QRCode($('etQr'),{text:texto,width:170,height:170,correctLevel:QRCode.CorrectLevel.M});
+  // sin acentos (menos bytes) y nivel L para máxima capacidad; si aun así no cabe, QR compacto
+  var qrTexto=texto.normalize('NFD').replace(/[̀-ͯ]/g,'');
+  try{
+    new QRCode($('etQr'),{text:qrTexto,width:170,height:170,correctLevel:QRCode.CorrectLevel.L});
+  }catch(e1){
+    try{
+      $('etQr').innerHTML='';
+      new QRCode($('etQr'),{text:'OGUA,'+csvEtiqueta_(d)+','+d.fecha+',C'+d.numConteo,width:170,height:170,correctLevel:QRCode.CorrectLevel.L});
+    }catch(e2){ $('etQr').innerHTML='<small style="color:#c00">QR no disponible (texto muy largo)</small>'; }
+  }
   try{ JsBarcode('#etBar',csvEtiqueta_(d),{format:'CODE128',displayValue:false,height:46,margin:0,width:1}); }
   catch(e){ $('etBar').innerHTML=''; }
   $('etInfo').innerHTML=texto.split('\n').slice(1).map(function(l){return '<div>'+l+'</div>';}).join('');
@@ -663,9 +672,9 @@ $('btnGuardar').onclick=function(){
   Promise.all(ops).then(function(rs){
     var dup=0; rs.forEach(function(r){ if(r.duplicadas) dup+=r.duplicadas.length; });
     toast('Conteo '+numConteo+' guardado: '+sel.n+(dup?(' · '+dup+' MAC ya registradas fueron ignoradas'):''));
-    mostrarEtiqueta(etData);
     macsSesion=[]; manualSesion=0; sel=null; fotosItem=0; pintarFotoCount();
     $('selItem').classList.add('hide'); $('buscar').value=''; $('posicion').value=''; pintarCaptura(); pararCamara();
+    try{ mostrarEtiqueta(etData); }catch(e){ toast('Etiqueta no disponible: '+String(e.message||e),true); }
   }).catch(function(e){ toast(String(e.message||e),true); })
     .finally(function(){ btn.disabled=false; btn.textContent='✅ Guardar conteo'; });
 };
