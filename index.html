@@ -106,8 +106,8 @@
       <h2>Sesión de conteo</h2>
       <div class="row">
         <div><label>Contador</label><input id="usuario" placeholder="Tu nombre"></div>
-        <div><label>Zona (elige o escribe una nueva)</label>
-          <input id="zona" list="zonasDl" placeholder="Ej: Bodega 2, Piso 3…" autocomplete="off">
+        <div><label>Bodega (elige o escribe una nueva)</label>
+          <input id="zona" list="zonasDl" placeholder="Ej: Bodega Norte" autocomplete="off">
           <datalist id="zonasDl"></datalist>
         </div>
       </div>
@@ -129,8 +129,9 @@
         <b id="selNombre"></b><br><small id="selCodigo" style="color:var(--mut)"></small>
         <div id="avance" class="hide" style="margin-top:6px;font-size:12px;color:var(--warn)"></div>
       </div>
-      <label>Posición del insumo (estante / rack / nivel…)</label>
-      <input id="posicion" placeholder="Ej: Rack 3 · Nivel 2 · Caja B" autocomplete="off">
+      <label>Ubicación en la bodega (elige o escribe una nueva)</label>
+      <input id="posicion" list="ubicacionesDl" placeholder="Ej: Rack 3 · Nivel 2 · Caja B" autocomplete="off">
+      <datalist id="ubicacionesDl"></datalist>
     </div>
 
     <div class="card" id="cardCaptura">
@@ -164,7 +165,7 @@
     <div class="card">
       <h2>Estado de ítems (vista ciega)</h2>
       <p style="color:var(--mut);font-size:12px">No se muestran cantidades: solo qué conteos existen y si se requiere un 3ro.</p>
-      <select id="pendZona"><option value="">Todas las zonas</option></select>
+      <select id="pendZona"><option value="">Todas las bodegas</option></select>
       <div class="list" id="pendList" style="margin-top:8px"></div>
     </div>
   </section>
@@ -253,9 +254,17 @@
       <button class="btn sec" id="btnAddEt">＋ Agregar etiqueta</button>
     </div>
     <div class="card">
-      <h2>Zonas</h2>
-      <div class="row"><input id="nuevaZona" placeholder="Nueva zona…"><button class="btn sec" style="margin-top:0" id="btnZona">＋</button></div>
+      <h2>Bodegas y ubicaciones</h2>
+      <label>Nueva bodega</label>
+      <div class="row"><input id="nuevaZona" placeholder="Ej: Bodega Norte"><button class="btn sec" style="margin-top:0" id="btnZona">＋</button></div>
       <div id="zonasList" style="margin-top:8px;color:var(--mut);font-size:13px"></div>
+      <label>Nueva ubicación dentro de una bodega</label>
+      <div class="row">
+        <select id="ubiBodega"></select>
+        <input id="nuevaUbi" placeholder="Ej: Rack 3 · Nivel 2">
+        <button class="btn sec" style="margin-top:0" id="btnUbi">＋</button>
+      </div>
+      <div id="ubiList" style="margin-top:8px;color:var(--mut);font-size:13px"></div>
     </div>
     <p style="color:var(--mut);font-size:12px;text-align:center">
       La configuración de fuente de datos, Slack y envíos automáticos se administra
@@ -346,11 +355,14 @@ function iniciar(){
     BOOT=b; MAESTRO=b.maestro.items||[];
     $('subt').textContent = MAESTRO.length+' artículos en maestro · conectado';
     var dl=$('zonasDl'); var pz=$('pendZona');
-    dl.innerHTML=''; pz.innerHTML='<option value="">Todas las zonas</option>';
+    dl.innerHTML=''; pz.innerHTML='<option value="">Todas las bodegas</option>';
+    $('ubiBodega').innerHTML='';
     (b.zonas||[]).forEach(function(z){
       dl.appendChild(new Option(z,z)); pz.appendChild(new Option(z,z));
+      $('ubiBodega').appendChild(new Option(z,z));
     });
     $('zona').value = localStorage.getItem('ogua_zona')||'';
+    pintarUbicaciones(); pintarUbiList();
     $('zonasList').textContent=(b.zonas||[]).join(' · ');
     $('usuario').value = localStorage.getItem('ogua_user')||'';
     $('conUrl').value=API.url; $('conTok').value=API.token;
@@ -411,7 +423,29 @@ document.querySelectorAll('#segConteo button').forEach(function(b){
     cargarAvance();
   };
 });
-$('zona').addEventListener('change',function(){ if(sel) cargarAvance(); });
+$('zona').addEventListener('change',function(){ pintarUbicaciones(); if(sel) cargarAvance(); });
+
+// ---- ubicaciones por bodega ----
+function pintarUbicaciones(){
+  var dl=$('ubicacionesDl'); dl.innerHTML='';
+  var b=norm($('zona').value);
+  ((BOOT&&BOOT.ubicaciones)||[]).forEach(function(x){
+    if(!b||norm(x.b)===b) dl.appendChild(new Option(x.u,x.u));
+  });
+}
+function pintarUbiList(){
+  var por={};
+  ((BOOT&&BOOT.ubicaciones)||[]).forEach(function(x){ (por[x.b]=por[x.b]||[]).push(x.u); });
+  $('ubiList').innerHTML=Object.keys(por).map(function(b){
+    return '<div><b>'+b+':</b> '+por[b].join(' · ')+'</div>';
+  }).join('')||'Sin ubicaciones registradas';
+}
+function registrarUbicacionLocal(bodega,ubi){
+  if(!bodega||!ubi||!BOOT) return;
+  BOOT.ubicaciones=BOOT.ubicaciones||[];
+  var existe=BOOT.ubicaciones.some(function(x){return norm(x.b)===norm(bodega)&&norm(x.u)===norm(ubi);});
+  if(!existe){ BOOT.ubicaciones.push({b:bodega,u:ubi}); pintarUbicaciones(); pintarUbiList(); }
+}
 
 // ---- avance del conteo actual (para reanudar) ----
 function cargarAvance(){
@@ -757,6 +791,7 @@ $('btnGuardar').onclick=function(){
   Promise.all(opsPendientes(v)).then(function(rs){
     var acc=0,dup=0; rs.forEach(function(r){ acc+=r.aceptadas||0; if(r.duplicadas) dup+=r.duplicadas.length; });
     macsSesion=[]; manualSesion=0;
+    registrarUbicacionLocal(v.zona,v.posicion);
     toast('Avance guardado: +'+acc+' unidades. Puedes seguir o retomar luego.'+(dup?(' ('+dup+' MAC duplicadas ignoradas)'):''));
     cargarAvance();
   }).catch(function(e){ toast(String(e.message||e),true); })
@@ -775,6 +810,7 @@ $('btnCerrar').onclick=function(){
     etData.cantidad=base+acc;
     return gs('cerrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,usuario:v.usuario});
   }).then(function(){
+    registrarUbicacionLocal(v.zona,v.posicion);
     toast('Conteo '+numConteo+' cerrado: '+etData.nombre+' ('+etData.cantidad+' unidades)');
     macsSesion=[]; manualSesion=0; sel=null; fotosItem=0; savedMacs=[]; savedQty=0; conteoCerrado=false; pintarFotoCount();
     $('selItem').classList.add('hide'); $('buscar').value=''; $('posicion').value=''; pintarCaptura(); pararCamara();
@@ -908,7 +944,16 @@ $('btnZona').onclick=function(){
   if(!n){toast('Escribe el nombre de la zona',true);return;}
   gs('addZona',n).then(function(){
     $('zonasDl').appendChild(new Option(n,n)); $('pendZona').appendChild(new Option(n,n));
-    $('zonasList').textContent+=' · '+n; $('nuevaZona').value=''; toast('Zona agregada');
+    $('ubiBodega').appendChild(new Option(n,n));
+    $('zonasList').textContent+=' · '+n; $('nuevaZona').value=''; toast('Bodega agregada');
+  }).catch(function(e){toast(String(e.message||e),true);});
+};
+$('btnUbi').onclick=function(){
+  var b=$('ubiBodega').value, u=$('nuevaUbi').value.trim();
+  if(!b||!u){toast('Elige la bodega y escribe la ubicación',true);return;}
+  gs('addUbicacion',{bodega:b,ubicacion:u}).then(function(){
+    registrarUbicacionLocal(b,u);
+    $('nuevaUbi').value=''; toast('Ubicación agregada a '+b);
   }).catch(function(e){toast(String(e.message||e),true);});
 };
 
