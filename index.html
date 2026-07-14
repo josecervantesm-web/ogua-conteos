@@ -171,8 +171,8 @@
       <div class="list" id="pendList" style="margin-top:8px"></div>
     </div>
     <div class="card">
-      <h2>🏷 Conteos cerrados — regenerar códigos</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Vuelve a generar el código de barras o el QR de un conteo ya cerrado.</p>
+      <h2>🏷 Ítems confirmados — etiquetas</h2>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Solo aparecen ítems con cantidad CONFIRMADA (los conteos coinciden). Genera el código de barras o el QR con la cantidad final.</p>
       <input id="cerrBuscar" placeholder="Filtrar por artículo…">
       <div class="list" id="cerrList" style="margin-top:8px"></div>
     </div>
@@ -689,7 +689,7 @@ function mostrarEtiqueta(d,modo){
     +'\nFecha: '+d.fecha
     +'\nArtículo: '+d.nombre+(d.codigo?(' ('+d.codigo+')'):'')
     +'\nCantidad: '+d.cantidad
-    +'\nConteo #: '+d.numConteo
+    +(d.final?'\nCantidad CONFIRMADA':'\nConteo #: '+d.numConteo)
     +'\nZona: '+d.zona
     +(d.posicion?('\nPosición: '+d.posicion):'')
     +'\nContó: '+d.usuario;
@@ -703,7 +703,7 @@ function mostrarEtiqueta(d,modo){
     }catch(e1){
       try{
         $('etQr').innerHTML='';
-        new QRCode($('etQr'),{text:'OGUA,'+csvEtiqueta_(d)+','+d.fecha+',C'+d.numConteo,width:170,height:170,correctLevel:QRCode.CorrectLevel.L});
+        new QRCode($('etQr'),{text:'OGUA,'+csvEtiqueta_(d)+','+d.fecha+','+(d.final?'FINAL':'C'+d.numConteo),width:170,height:170,correctLevel:QRCode.CorrectLevel.L});
       }catch(e2){ $('etQr').innerHTML='<small style="color:#c00">QR no disponible (texto muy largo)</small>'; }
     }
   }
@@ -735,7 +735,7 @@ $('btnImprimirEt').onclick=function(){
   var chico=e.h<40;
   $('plName').textContent=ET.nombre;
   $('plName').style.fontSize=chico?'8pt':'11pt';
-  $('plInfo').textContent='Cant: '+ET.cantidad+' · C'+ET.numConteo+' · '+ET.zona
+  $('plInfo').textContent='Cant: '+ET.cantidad+(ET.final?' · CONFIRMADA':' · C'+ET.numConteo)+' · '+ET.zona
     +(ET.posicion?(' · '+ET.posicion):'')+' · '+ET.usuario+' · '+ET.fecha;
   $('plInfo').style.fontSize=chico?'6pt':'8pt';
   var img=$('plQr');
@@ -780,7 +780,7 @@ function generarZpl_(d,e,modo){
   var x=16;
   if(chico){
     z.push('^FO'+x+',8^A0N,22,22^FB'+(W-2*x)+',1,0,L^FD'+t(d.nombre)+'^FS');
-    z.push('^FO'+x+',34^A0N,18,18^FDCant: '+t(d.cantidad)+'  C'+d.numConteo+'  '+t(d.zona)+(d.posicion?('  '+t(d.posicion)):'')+'^FS');
+    z.push('^FO'+x+',34^A0N,18,18^FDCant: '+t(d.cantidad)+(d.final?'  CONFIRMADA':'  C'+d.numConteo)+'  '+t(d.zona)+(d.posicion?('  '+t(d.posicion)):'')+'^FS');
     if(modo==='qr'){
       z.push('^FO'+x+','+Math.max(56,H-130)+'^BQN,2,3^FDLA,OGUA,'+csv+','+t(d.fecha)+'^FS');
     } else {
@@ -794,7 +794,7 @@ function generarZpl_(d,e,modo){
       tx=x+(qmag*32)+16;
     }
     z.push('^FO'+tx+',16^A0N,26,26^FB'+(W-tx-10)+',2,2,L^FD'+t(d.nombre)+'^FS');
-    z.push('^FO'+tx+',78^A0N,22,22^FDCantidad: '+t(d.cantidad)+'   Conteo '+d.numConteo+'^FS');
+    z.push('^FO'+tx+',78^A0N,22,22^FDCantidad: '+t(d.cantidad)+(d.final?'   CONFIRMADA':'   Conteo '+d.numConteo)+'^FS');
     z.push('^FO'+tx+',106^A0N,22,22^FD'+t(d.zona)+(d.posicion?(' - '+t(d.posicion)):'')+'^FS');
     z.push('^FO'+tx+',134^A0N,20,20^FD'+t(d.usuario)+' - '+t(d.fecha)+'^FS');
     if(modo!=='qr'){
@@ -854,7 +854,8 @@ $('btnCerrar').onclick=function(){
     toast('Conteo '+numConteo+' cerrado: '+etData.nombre+' ('+etData.cantidad+' unidades)');
     macsSesion=[]; manualSesion=0; sel=null; fotosItem=0; savedMacs=[]; savedQty=0; conteoCerrado=false; pintarFotoCount();
     $('selItem').classList.add('hide'); $('buscar').value=''; $('posicion').value=''; pintarCaptura(); pararCamara();
-    try{ mostrarEtiqueta(etData); }catch(e){ toast('Etiqueta no disponible: '+String(e.message||e),true); }
+    // La etiqueta ya no se genera aquí: solo se descarga desde "Ítems confirmados"
+    // cuando la cantidad queda confirmada (conteos coinciden).
   }).catch(function(e){ toast(String(e.message||e),true); })
     .finally(function(){ btn.disabled=false; btn.textContent='✅ Guardar y cerrar'; });
 };
@@ -890,16 +891,16 @@ function cargarPendientes(){
 }
 $('pendZona').onchange=function(){ cargarPendientes(); cargarCerrados(); };
 
-// ---- conteos cerrados: regenerar código de barras o QR ----
+// ---- ítems confirmados: generar etiqueta con la cantidad final ----
 var CERR=[];
 function cargarCerrados(){
   $('cerrList').innerHTML='<div class="item">Cargando…</div>';
-  gs('getConteosCerrados',$('pendZona').value).then(function(list){
+  gs('getConfirmados',$('pendZona').value).then(function(list){
     CERR=list||[];
     pintarCerrados();
   }).catch(function(e){
     var msg=String(e.message||e);
-    if(/no permitida/i.test(msg)) msg='Actualiza el Code.gs en Apps Script: falta la función getConteosCerrados (y crea una nueva versión de la implementación).';
+    if(/no permitida/i.test(msg)) msg='Actualiza el Code.gs en Apps Script: falta la función getConfirmados (y crea una nueva versión de la implementación).';
     $('cerrList').innerHTML='<div class="item" style="color:var(--err)">'+msg+'</div>';
   });
 }
@@ -907,10 +908,10 @@ function pintarCerrados(){
   var q=norm($('cerrBuscar').value);
   var list=CERR.map(function(it,i){ it._i=i; return it; })
     .filter(function(it){ return !q || norm(it.nombre).indexOf(q)>=0 || String(it.codigo).indexOf(q)>=0; });
-  if(!list.length){ $('cerrList').innerHTML='<div class="item">Sin conteos cerrados</div>'; return; }
+  if(!list.length){ $('cerrList').innerHTML='<div class="item">Aún no hay ítems con cantidad confirmada</div>'; return; }
   $('cerrList').innerHTML=list.map(function(it){
     return '<div class="item"><div>'+it.nombre
-      +'<small>'+it.zona+' · Conteo '+it.numConteo+' · '+it.cantidad+' unid'
+      +'<small>'+it.zona+' · '+it.cantidad+' unid confirmadas'
       +(it.posicion?(' · '+it.posicion):'')+(it.usuario?(' · '+it.usuario):'')+' · '+it.fecha+'</small></div>'
       +'<div style="display:flex;gap:6px;flex-shrink:0">'
       +'<button class="mini" onclick="regenCodigo('+it._i+',\'bar\')">📊 Barras</button>'
@@ -923,7 +924,7 @@ function regenCodigo(i,modo){
   var it=CERR[i]; if(!it) return;
   mostrarEtiqueta({
     fecha:it.fecha, nombre:it.nombre, codigo:it.codigo, cantidad:it.cantidad,
-    numConteo:it.numConteo, zona:it.zona, posicion:it.posicion||'', usuario:it.usuario||''
+    final:true, zona:it.zona, posicion:it.posicion||'', usuario:it.usuario||''
   }, modo);
 }
 function reanudarItem(i){
