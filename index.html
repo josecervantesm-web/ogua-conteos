@@ -306,9 +306,12 @@
 </nav>
 
 <script>
+// Configuración por defecto (preconfigurada — no es necesario llenar el formulario)
+var API_DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbyPjoR2PvoWDUy7ZUAIExCjnx2ewnyI7qbYz2A-GtYhHJhOK6hZzI08e9wutl8MAn_E/exec';
+var API_DEFAULT_TOKEN = '911eab6d3d0d4f4c9cbb03c0b51ee211';
 var API = {
-  url: localStorage.getItem('ogua_api_url') || '',
-  token: localStorage.getItem('ogua_api_token') || ''
+  url: localStorage.getItem('ogua_api_url') || API_DEFAULT_URL,
+  token: localStorage.getItem('ogua_api_token') || API_DEFAULT_TOKEN
 };
 var BOOT = null;
 var MAESTRO = [];
@@ -380,6 +383,9 @@ $('btnConectar').onclick=function(){
   var u=$('setUrl').value.trim(), t=$('setTok').value.trim();
   if(!/^https:\/\/script\.google(usercontent)?\.com\/.+/.test(u) || u.indexOf('/exec')<0){
     $('setupMsg').textContent='La URL debe ser la de la implementación y terminar en /exec'; return;
+  }
+  if(/\/a\/[^/]+\/macros/.test(u)){
+    $('setupMsg').textContent='⚠ Esa URL es de la implementación restringida al dominio (contiene "/a/somosinternet.co/"). Ve a Apps Script → Implementar → Administrar implementaciones y copia la URL de la implementación con acceso "Cualquier persona" (empieza con https://script.google.com/macros/s/…). Si no existe, créala con Nueva implementación.'; return;
   }
   if(!t){ $('setupMsg').textContent='Falta el token'; return; }
   API.url=u; API.token=t;
