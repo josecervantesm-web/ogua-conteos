@@ -71,6 +71,8 @@
     body.print-et #printLabel{display:flex !important}
   }
   #setup{position:fixed;inset:0;background:var(--bg);z-index:200;padding:20px;overflow:auto}
+  .mini{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .mini:active{background:var(--acc)}
 </style>
 </head>
 <body>
@@ -167,6 +169,12 @@
       <p style="color:var(--mut);font-size:12px">No se muestran cantidades: solo qué conteos existen y si se requiere un 3ro.</p>
       <select id="pendZona"><option value="">Todas las bodegas</option></select>
       <div class="list" id="pendList" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>🏷 Conteos cerrados — regenerar códigos</h2>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Vuelve a generar el código de barras o el QR de un conteo ya cerrado.</p>
+      <input id="cerrBuscar" placeholder="Filtrar por artículo…">
+      <div class="list" id="cerrList" style="margin-top:8px"></div>
     </div>
   </section>
 
@@ -275,7 +283,7 @@
 
 <div id="etModal" class="modal hide">
   <div class="mcard">
-    <h2 style="margin:0 0 8px;font-size:16px">🏷 Etiqueta de conteo</h2>
+    <h2 style="margin:0 0 8px;font-size:16px" id="etTitle">🏷 Etiqueta de conteo</h2>
     <div id="etQr"></div>
     <svg id="etBar" style="width:100%;max-height:60px;margin-top:6px"></svg>
     <div id="etInfo"></div>
@@ -408,7 +416,7 @@ document.querySelectorAll('.tabs button').forEach(function(btn){
     ['conteo','pend','comp','mov','dash','conf'].forEach(function(v){
       $('v-'+v).classList.toggle('hide', v!==btn.dataset.v);
     });
-    if(btn.dataset.v==='pend') cargarPendientes();
+    if(btn.dataset.v==='pend'){ cargarPendientes(); cargarCerrados(); }
     if(btn.dataset.v==='comp') cargarComparativo();
     if(btn.dataset.v==='mov') cargarMovimientos();
     if(btn.dataset.v==='dash') cargarDashboard();
@@ -673,8 +681,10 @@ function csvEtiqueta_(d){
   function s(v){return String(v==null?'':v).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[,\^~]/g,' ').trim();}
   return [s(d.cantidad),s(d.nombre),s(d.zona),s(d.posicion),s(d.usuario)].join(',');
 }
-function mostrarEtiqueta(d){
-  ET=d;
+var ET_MODO=''; // '' = etiqueta completa · 'qr' = solo QR · 'bar' = solo código de barras
+function mostrarEtiqueta(d,modo){
+  ET=d; ET_MODO=modo||'';
+  $('etTitle').textContent = modo==='qr' ? '🔳 QR del conteo' : (modo==='bar' ? '📊 Código de barras del conteo' : '🏷 Etiqueta de conteo');
   var texto='OGUA CONTEO'
     +'\nFecha: '+d.fecha
     +'\nArtículo: '+d.nombre+(d.codigo?(' ('+d.codigo+')'):'')
@@ -684,18 +694,25 @@ function mostrarEtiqueta(d){
     +(d.posicion?('\nPosición: '+d.posicion):'')
     +'\nContó: '+d.usuario;
   $('etQr').innerHTML='';
-  // sin acentos (menos bytes) y nivel L para máxima capacidad; si aun así no cabe, QR compacto
-  var qrTexto=texto.normalize('NFD').replace(/[̀-ͯ]/g,'');
-  try{
-    new QRCode($('etQr'),{text:qrTexto,width:170,height:170,correctLevel:QRCode.CorrectLevel.L});
-  }catch(e1){
+  $('etQr').classList.toggle('hide', ET_MODO==='bar');
+  if(ET_MODO!=='bar'){
+    // sin acentos (menos bytes) y nivel L para máxima capacidad; si aun así no cabe, QR compacto
+    var qrTexto=texto.normalize('NFD').replace(/[̀-ͯ]/g,'');
     try{
-      $('etQr').innerHTML='';
-      new QRCode($('etQr'),{text:'OGUA,'+csvEtiqueta_(d)+','+d.fecha+',C'+d.numConteo,width:170,height:170,correctLevel:QRCode.CorrectLevel.L});
-    }catch(e2){ $('etQr').innerHTML='<small style="color:#c00">QR no disponible (texto muy largo)</small>'; }
+      new QRCode($('etQr'),{text:qrTexto,width:170,height:170,correctLevel:QRCode.CorrectLevel.L});
+    }catch(e1){
+      try{
+        $('etQr').innerHTML='';
+        new QRCode($('etQr'),{text:'OGUA,'+csvEtiqueta_(d)+','+d.fecha+',C'+d.numConteo,width:170,height:170,correctLevel:QRCode.CorrectLevel.L});
+      }catch(e2){ $('etQr').innerHTML='<small style="color:#c00">QR no disponible (texto muy largo)</small>'; }
+    }
   }
-  try{ JsBarcode('#etBar',csvEtiqueta_(d),{format:'CODE128',displayValue:false,height:46,margin:0,width:1}); }
-  catch(e){ $('etBar').innerHTML=''; }
+  $('etBar').innerHTML='';
+  $('etBar').classList.toggle('hide', ET_MODO==='qr');
+  if(ET_MODO!=='qr'){
+    try{ JsBarcode('#etBar',csvEtiqueta_(d),{format:'CODE128',displayValue:ET_MODO==='bar',fontSize:12,height:ET_MODO==='bar'?70:46,margin:0,width:1}); }
+    catch(e){ $('etBar').innerHTML=''; }
+  }
   $('etInfo').innerHTML=texto.split('\n').slice(1).map(function(l){return '<div>'+l+'</div>';}).join('');
   var selEt=$('etSize'); selEt.innerHTML='';
   etiquetas_().forEach(function(e,i){ selEt.appendChild(new Option(e.n+' — '+e.w+'x'+e.h+' mm',i)); });
@@ -724,21 +741,28 @@ $('btnImprimirEt').onclick=function(){
   var img=$('plQr');
   var cv=$('etQr').querySelector('canvas');
   var q=Math.min(e.h-22,32); // lado del QR en mm
-  if(cv && !chico){
+  var conQr = ET_MODO!=='bar' && cv && (!chico || ET_MODO==='qr');
+  var conBar = ET_MODO!=='qr';
+  if(conQr){
     img.src=cv.toDataURL('image/png');
     img.style.display='block'; img.style.width=q+'mm'; img.style.height=q+'mm';
   } else { img.style.display='none'; }
-  try{ JsBarcode('#plBar',csvEtiqueta_(ET),{format:'CODE128',displayValue:true,fontSize:10,height:34,margin:0,width:1}); }
-  catch(err){ $('plBar').innerHTML=''; }
-  $('plBar').style.width=(chico?(e.w-6):(e.w-q-10))+'mm';
-  $('plBar').style.height=(chico?(e.h-14):Math.min(e.h-24,24))+'mm';
+  if(conBar){
+    try{ JsBarcode('#plBar',csvEtiqueta_(ET),{format:'CODE128',displayValue:true,fontSize:10,height:34,margin:0,width:1}); }
+    catch(err){ $('plBar').innerHTML=''; }
+    $('plBar').style.display='block';
+    $('plBar').style.width=((chico||!conQr)?(e.w-6):(e.w-q-10))+'mm';
+    $('plBar').style.height=(chico?(e.h-14):Math.min(e.h-24,24))+'mm';
+  } else {
+    $('plBar').innerHTML=''; $('plBar').style.display='none';
+  }
   document.body.classList.add('print-et');
   setTimeout(function(){ window.print(); document.body.classList.remove('print-et'); },80);
 };
 $('btnZpl').onclick=function(){
   if(!ET) return;
   var e=etSel_();
-  var blob=new Blob([generarZpl_(ET,e)],{type:'text/plain'});
+  var blob=new Blob([generarZpl_(ET,e,ET_MODO)],{type:'text/plain'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='etiqueta_'+String(ET.codigo||ET.nombre).replace(/[^\w-]/g,'_').slice(0,30)+'.zpl';
@@ -746,7 +770,8 @@ $('btnZpl').onclick=function(){
   toast('ZPL descargado (203 dpi): envíalo a la Zebra');
 };
 // ZPL nativo para ZD230 (203 dpi = 8 puntos/mm)
-function generarZpl_(d,e){
+function generarZpl_(d,e,modo){
+  modo=modo||'';
   var W=Math.round(e.w*8), H=Math.round(e.h*8);
   var csv=csvEtiqueta_(d);
   function t(v){return String(v==null?'':v).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[\^~]/g,' ');}
@@ -756,16 +781,25 @@ function generarZpl_(d,e){
   if(chico){
     z.push('^FO'+x+',8^A0N,22,22^FB'+(W-2*x)+',1,0,L^FD'+t(d.nombre)+'^FS');
     z.push('^FO'+x+',34^A0N,18,18^FDCant: '+t(d.cantidad)+'  C'+d.numConteo+'  '+t(d.zona)+(d.posicion?('  '+t(d.posicion)):'')+'^FS');
-    z.push('^FO'+x+','+(H-92)+'^BY1,2,56^BCN,56,Y,N,N^FD'+csv+'^FS');
+    if(modo==='qr'){
+      z.push('^FO'+x+','+Math.max(56,H-130)+'^BQN,2,3^FDLA,OGUA,'+csv+','+t(d.fecha)+'^FS');
+    } else {
+      z.push('^FO'+x+','+(H-92)+'^BY1,2,56^BCN,56,Y,N,N^FD'+csv+'^FS');
+    }
   } else {
     var qmag=e.h>=70?5:4;
-    z.push('^FO'+x+',12^BQN,2,'+qmag+'^FDLA,OGUA,'+csv+','+t(d.fecha)+'^FS');
-    var tx=x+(qmag*32)+16;
+    var tx=x;
+    if(modo!=='bar'){
+      z.push('^FO'+x+',12^BQN,2,'+qmag+'^FDLA,OGUA,'+csv+','+t(d.fecha)+'^FS');
+      tx=x+(qmag*32)+16;
+    }
     z.push('^FO'+tx+',16^A0N,26,26^FB'+(W-tx-10)+',2,2,L^FD'+t(d.nombre)+'^FS');
     z.push('^FO'+tx+',78^A0N,22,22^FDCantidad: '+t(d.cantidad)+'   Conteo '+d.numConteo+'^FS');
     z.push('^FO'+tx+',106^A0N,22,22^FD'+t(d.zona)+(d.posicion?(' - '+t(d.posicion)):'')+'^FS');
     z.push('^FO'+tx+',134^A0N,20,20^FD'+t(d.usuario)+' - '+t(d.fecha)+'^FS');
-    z.push('^FO'+x+','+(H-104)+'^BY1,2,64^BCN,64,Y,N,N^FD'+csv+'^FS');
+    if(modo!=='qr'){
+      z.push('^FO'+x+','+(H-104)+'^BY1,2,64^BCN,64,Y,N,N^FD'+csv+'^FS');
+    }
   }
   z.push('^XZ');
   return z.join('\n');
@@ -854,7 +888,44 @@ function cargarPendientes(){
     }).join('');
   }).catch(function(e){toast(String(e.message||e),true);});
 }
-$('pendZona').onchange=cargarPendientes;
+$('pendZona').onchange=function(){ cargarPendientes(); cargarCerrados(); };
+
+// ---- conteos cerrados: regenerar código de barras o QR ----
+var CERR=[];
+function cargarCerrados(){
+  $('cerrList').innerHTML='<div class="item">Cargando…</div>';
+  gs('getConteosCerrados',$('pendZona').value).then(function(list){
+    CERR=list||[];
+    pintarCerrados();
+  }).catch(function(e){
+    var msg=String(e.message||e);
+    if(/no permitida/i.test(msg)) msg='Actualiza el Code.gs en Apps Script: falta la función getConteosCerrados (y crea una nueva versión de la implementación).';
+    $('cerrList').innerHTML='<div class="item" style="color:var(--err)">'+msg+'</div>';
+  });
+}
+function pintarCerrados(){
+  var q=norm($('cerrBuscar').value);
+  var list=CERR.map(function(it,i){ it._i=i; return it; })
+    .filter(function(it){ return !q || norm(it.nombre).indexOf(q)>=0 || String(it.codigo).indexOf(q)>=0; });
+  if(!list.length){ $('cerrList').innerHTML='<div class="item">Sin conteos cerrados</div>'; return; }
+  $('cerrList').innerHTML=list.map(function(it){
+    return '<div class="item"><div>'+it.nombre
+      +'<small>'+it.zona+' · Conteo '+it.numConteo+' · '+it.cantidad+' unid'
+      +(it.posicion?(' · '+it.posicion):'')+(it.usuario?(' · '+it.usuario):'')+' · '+it.fecha+'</small></div>'
+      +'<div style="display:flex;gap:6px;flex-shrink:0">'
+      +'<button class="mini" onclick="regenCodigo('+it._i+',\'bar\')">📊 Barras</button>'
+      +'<button class="mini" onclick="regenCodigo('+it._i+',\'qr\')">🔳 QR</button>'
+      +'</div></div>';
+  }).join('');
+}
+$('cerrBuscar').addEventListener('input',pintarCerrados);
+function regenCodigo(i,modo){
+  var it=CERR[i]; if(!it) return;
+  mostrarEtiqueta({
+    fecha:it.fecha, nombre:it.nombre, codigo:it.codigo, cantidad:it.cantidad,
+    numConteo:it.numConteo, zona:it.zona, posicion:it.posicion||'', usuario:it.usuario||''
+  }, modo);
+}
 function reanudarItem(i){
   var it=PEND[i]; if(!it) return;
   if(it.estado==='CERRADO' && !confirm('Este ítem ya está CERRADO. ¿Agregar más unidades de todas formas?')) return;
