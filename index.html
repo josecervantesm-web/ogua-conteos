@@ -108,9 +108,8 @@
       <h2>Sesión de conteo</h2>
       <div class="row">
         <div><label>Contador</label><input id="usuario" placeholder="Tu nombre"></div>
-        <div><label>Bodega (elige o escribe una nueva)</label>
-          <input id="zona" list="zonasDl" placeholder="Ej: Bodega Norte" autocomplete="off">
-          <datalist id="zonasDl"></datalist>
+        <div><label>Bodega</label>
+          <select id="zona"><option value="">Elige bodega…</option></select>
         </div>
       </div>
       <label>¿Qué conteo estás haciendo? <span style="color:var(--warn)">(los conteos son ciegos)</span></label>
@@ -182,10 +181,11 @@
   <section id="v-comp" class="hide">
     <div class="card">
       <h2>Sistema vs físico</h2>
-      <input id="compBuscar" placeholder="Filtrar…">
+      <select id="compZona"><option value="">Todas las bodegas</option></select>
+      <input id="compBuscar" placeholder="Filtrar…" style="margin-top:8px">
       <div style="overflow:auto;margin-top:8px">
         <table>
-          <thead><tr><th>Artículo</th><th class="num">Sistema</th><th class="num">Físico</th><th class="num">Dif</th><th>Estado</th></tr></thead>
+          <thead><tr id="compHead"></tr></thead>
           <tbody id="compBody"></tbody>
         </table>
       </div>
@@ -263,9 +263,7 @@
     </div>
     <div class="card">
       <h2>Bodegas y ubicaciones</h2>
-      <label>Nueva bodega</label>
-      <div class="row"><input id="nuevaZona" placeholder="Ej: Bodega Norte"><button class="btn sec" style="margin-top:0" id="btnZona">＋</button></div>
-      <div id="zonasList" style="margin-top:8px;color:var(--mut);font-size:13px"></div>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Las bodegas son fijas: <b id="zonasList"></b></p>
       <label>Nueva ubicación dentro de una bodega</label>
       <div class="row">
         <select id="ubiBodega"></select>
@@ -365,16 +363,22 @@ function iniciar(){
   gs('getBootstrap').then(function(b){
     BOOT=b; MAESTRO=b.maestro.items||[];
     $('subt').textContent = MAESTRO.length+' artículos en maestro · conectado';
-    var dl=$('zonasDl'); var pz=$('pendZona');
-    dl.innerHTML=''; pz.innerHTML='<option value="">Todas las bodegas</option>';
-    $('ubiBodega').innerHTML='';
-    (b.zonas||[]).forEach(function(z){
-      dl.appendChild(new Option(z,z)); pz.appendChild(new Option(z,z));
-      $('ubiBodega').appendChild(new Option(z,z));
+    var bods=b.bodegas||[];
+    var zonaSel=$('zona'), pz=$('pendZona'), ub=$('ubiBodega'), cz=$('compZona');
+    zonaSel.innerHTML='<option value="">Elige bodega…</option>';
+    pz.innerHTML='<option value="">Todas las bodegas</option>';
+    if(cz) cz.innerHTML='<option value="">Todas las bodegas</option>';
+    ub.innerHTML='';
+    bods.forEach(function(z){
+      zonaSel.appendChild(new Option(z,z));
+      pz.appendChild(new Option(z,z));
+      if(cz) cz.appendChild(new Option(z,z));
+      ub.appendChild(new Option(z,z));
     });
-    $('zona').value = localStorage.getItem('ogua_zona')||'';
+    var zg=localStorage.getItem('ogua_zona')||'';
+    if(zg && bods.indexOf(zg)>=0) zonaSel.value=zg;
     pintarUbicaciones(); pintarUbiList();
-    $('zonasList').textContent=(b.zonas||[]).join(' · ');
+    $('zonasList').textContent=bods.join(' · ');
     $('usuario').value = localStorage.getItem('ogua_user')||'';
     $('conUrl').value=API.url; $('conTok').value=API.token;
     pintarEtList();
@@ -940,7 +944,7 @@ function reanudarItem(i){
     if((it.codigo&&String(x.c)===String(it.codigo))||norm(x.n)===n){ m=x; break; }
   }
   if(!m) m={c:it.codigo||'',n:it.nombre,b:''};
-  $('zona').value=it.zona;
+  $('zona').value=it.bodega||it.zona||'';
   var sug = it.estado==='REQUIERE_3' ? 3 : (!it.cer1 ? 1 : (!it.cer2 ? 2 : numConteo));
   setNumConteo(sug);
   document.querySelector('.tabs button[data-v="conteo"]').click();
@@ -951,23 +955,28 @@ function reanudarItem(i){
 // ---- comparativo ----
 var COMP=[];
 function cargarComparativo(){
-  $('compBody').innerHTML='<tr><td colspan="5">Cargando…</td></tr>';
-  gs('getComparativo').then(function(list){ COMP=list; pintarComp(); })
-    .catch(function(e){ $('compBody').innerHTML='<tr><td colspan="5">'+String(e.message||e)+'</td></tr>'; });
+  $('compBody').innerHTML='<tr><td colspan="6">Cargando…</td></tr>';
+  gs('getComparativo',$('compZona').value).then(function(list){ COMP=list; pintarComp(); })
+    .catch(function(e){ $('compBody').innerHTML='<tr><td colspan="6">'+String(e.message||e)+'</td></tr>'; });
 }
 function pintarComp(){
   var q=norm($('compBuscar').value);
+  var todas=!$('compZona').value;
+  var cols=todas?6:5;
+  $('compHead').innerHTML=(todas?'<th>Bodega</th>':'')+'<th>Artículo</th><th class="num">Sistema</th><th class="num">Físico</th><th class="num">Dif</th><th>Estado</th>';
   var list=COMP.filter(function(c){return !q||norm(c.nombre).indexOf(q)>=0||String(c.codigo).indexOf(q)>=0;});
   $('compBody').innerHTML=list.map(function(c){
     var color=c.dif==null?'var(--mut)':(c.dif===0?'var(--ok)':(c.dif<0?'var(--err)':'var(--warn)'));
-    return '<tr><td>'+c.nombre+'<br><small style="color:var(--mut)">'+c.zonas+'</small></td>'+
+    return '<tr>'+(todas?('<td>'+c.bodega+'</td>'):'')+
+      '<td>'+c.nombre+'<br><small style="color:var(--mut)">'+(c.codigo||'')+'</small></td>'+
       '<td class="num">'+(c.sistema==null?'—':c.sistema)+'</td>'+
       '<td class="num">'+(c.fisico==null?'—':c.fisico)+'</td>'+
       '<td class="num" style="color:'+color+';font-weight:700">'+(c.dif==null?'—':(c.dif>0?'+':'')+c.dif)+'</td>'+
       '<td>'+c.estado+'</td></tr>';
-  }).join('')||'<tr><td colspan="5">Sin datos</td></tr>';
+  }).join('')||'<tr><td colspan="'+cols+'">Sin datos</td></tr>';
 }
 $('compBuscar').addEventListener('input',pintarComp);
+$('compZona').addEventListener('change',cargarComparativo);
 
 // ---- movimientos ----
 $('btnMov').onclick=function(){
@@ -1016,16 +1025,7 @@ $('btnSlack').onclick=function(){
     .finally(function(){b.disabled=false;});
 };
 
-// ---- zonas ----
-$('btnZona').onclick=function(){
-  var n=$('nuevaZona').value.trim();
-  if(!n){toast('Escribe el nombre de la zona',true);return;}
-  gs('addZona',n).then(function(){
-    $('zonasDl').appendChild(new Option(n,n)); $('pendZona').appendChild(new Option(n,n));
-    $('ubiBodega').appendChild(new Option(n,n));
-    $('zonasList').textContent+=' · '+n; $('nuevaZona').value=''; toast('Bodega agregada');
-  }).catch(function(e){toast(String(e.message||e),true);});
-};
+// ---- ubicaciones ----
 $('btnUbi').onclick=function(){
   var b=$('ubiBodega').value, u=$('nuevaUbi').value.trim();
   if(!b||!u){toast('Elige la bodega y escribe la ubicación',true);return;}
