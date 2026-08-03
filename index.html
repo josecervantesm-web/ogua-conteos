@@ -311,12 +311,29 @@
   <div id="plCodes"><img id="plQr" alt=""><svg id="plBar"></svg></div>
 </div>
 
+  <!-- ================= MACs ================= -->
+  <section id="v-macs" class="hide">
+    <div class="card">
+      <h2>MACs y su ubicación</h2>
+      <p style="color:var(--mut);font-size:12px">Cada MAC escaneada con la ubicación donde se registró.</p>
+      <input id="macBuscar" placeholder="Buscar por MAC, artículo, zona o ubicación…" autocomplete="off">
+      <div style="overflow:auto;margin-top:8px">
+        <table>
+          <thead><tr><th>MAC</th><th>Ubicación</th><th>Artículo</th><th>Bodega</th><th>C#</th><th>Usuario</th><th>Fecha</th></tr></thead>
+          <tbody id="macBody"></tbody>
+        </table>
+      </div>
+      <p id="macResumen" style="color:var(--mut);font-size:12px;margin-top:8px"></p>
+    </div>
+  </section>
+
 <nav class="tabs">
   <button data-v="conteo" class="on"><span class="ico">🔢</span>Conteo</button>
   <button data-v="pend"><span class="ico">📋</span>Ítems</button>
   <button data-v="comp"><span class="ico">⚖️</span>Compar.</button>
   <button data-v="mov"><span class="ico">🔄</span>Movim.</button>
   <button data-v="dash"><span class="ico">📊</span>Dash</button>
+  <button data-v="macs"><span class="ico">🔌</span>MACs</button>
   <button data-v="conf"><span class="ico">⚙️</span>Config</button>
 </nav>
 
@@ -440,18 +457,40 @@ $('btnReconectar').onclick=function(){
 };
 iniciar();
 
+// ---- MACs y su ubicación ----
+function cargarMacs(){
+  var body=$('macBody'); var q=$('macBuscar').value.trim();
+  body.innerHTML="<tr><td colspan='7' style='color:var(--mut)'>Cargando…</td></tr>";
+  gs('getMacs',q).then(function(rows){
+    if(!rows.length){ body.innerHTML="<tr><td colspan='7' style='color:var(--mut)'>Sin MACs registradas.</td></tr>"; $('macResumen').textContent=''; return; }
+    body.innerHTML=rows.map(function(m){
+      var mac=m.mac.replace(/(..)(?=.)/g,"$1:");
+      var ubi=m.posicion?m.posicion:"<span style='color:var(--warn)'>— sin ubicación</span>";
+      return "<tr><td style='font-family:monospace'>"+mac+"</td><td>"+ubi+"</td><td>"+(m.nombre||m.codigo||"")+"</td><td>"+(m.bodega||m.zona||"")+"</td><td>"+(m.numConteo||"")+"</td><td>"+(m.usuario||"")+"</td><td>"+(m.timestamp||"")+"</td></tr>";
+    }).join("");
+    var conUbi=rows.filter(function(m){return m.posicion;}).length;
+    $('macResumen').textContent=rows.length+" MACs · "+conUbi+" con ubicación · "+(rows.length-conUbi)+" sin ubicación";
+  }).catch(function(e){ body.innerHTML="<tr><td colspan='7' style='color:#e33'>"+String(e.message||e)+"</td></tr>"; });
+}
+var _macBuscarT=null;
+document.addEventListener('DOMContentLoaded',function(){
+  var mb=$('macBuscar');
+  if(mb) mb.addEventListener('input',function(){ clearTimeout(_macBuscarT); _macBuscarT=setTimeout(cargarMacs,300); });
+});
+
 // ---- tabs ----
 document.querySelectorAll('.tabs button').forEach(function(btn){
   btn.onclick=function(){
     document.querySelectorAll('.tabs button').forEach(function(b){b.classList.remove('on');});
     btn.classList.add('on');
-    ['conteo','pend','comp','mov','dash','conf'].forEach(function(v){
+    ['conteo','pend','comp','mov','dash','macs','conf'].forEach(function(v){
       $('v-'+v).classList.toggle('hide', v!==btn.dataset.v);
     });
     if(btn.dataset.v==='pend'){ cargarPendientes(); cargarCerrados(); }
     if(btn.dataset.v==='comp') cargarComparativo();
     if(btn.dataset.v==='mov') cargarMovimientos();
     if(btn.dataset.v==='dash') cargarDashboard();
+    if(btn.dataset.v==='macs') cargarMacs();
   };
 });
 
