@@ -536,7 +536,7 @@ function restaurarSesion(){
   if(!confirm('Hay una sesión sin guardar: "'+s.sel.n+'" con '+total+' unidades (conteo '+s.num+', '+(s.zona||'sin zona')+'). ¿Reanudarla?')){
     localStorage.removeItem('ogua_sesion'); return;
   }
-  sel=s.sel; macsSesion=s.macs||[]; manualSesion=s.manual||0;
+  sel=s.sel; macsSesion=(s.macs||[]).map(function(x){return (x&&typeof x==='object')?{mac:x.mac,pos:x.pos||s.pos||''}:{mac:x,pos:s.pos||''};}); manualSesion=s.manual||0;
   $('zona').value=s.zona||''; $('posicion').value=s.pos||'';
   setNumConteo(s.num||1);
   $('selItem').classList.remove('hide');
@@ -594,9 +594,9 @@ function procesarScan(raw){
   if(mac){
     if(!sel){ toast('Primero selecciona el artículo',true); beep(220); return; }
     if(conteoCerrado){ toast('Este conteo está cerrado. Reábrelo para agregar.',true); beep(220); return; }
-    if(savedMacs.indexOf(mac)>=0){ toast('MAC ya guardada en este conteo',true); beep(220); return; }
-    if(macsSesion.indexOf(mac)>=0){ toast('MAC repetida en esta sesión',true); beep(220); return; }
-    macsSesion.push(mac); beep(880); pintarCaptura(); return;
+    if(savedMacs.some(function(x){return x.mac===mac;})){ toast('MAC ya guardada en este conteo',true); beep(220); return; }
+    if(macsSesion.some(function(x){return x.mac===mac;})){ toast('MAC repetida en esta sesión',true); beep(220); return; }
+    macsSesion.push({mac:mac,pos:$('posicion').value.trim()}); beep(880); pintarCaptura(); return;
   }
   var q=norm(raw);
   var hit=MAESTRO.find(function(it){ return String(it.c)===raw || (it.b&&String(it.b)===raw) || norm(it.c)===q; });
@@ -694,9 +694,9 @@ function pintarCaptura(){
   $('contador').textContent = savedQty+nuevas;
   $('detalleCant').textContent = savedQty+' guardadas + '+nuevas+' nuevas'+(conteoCerrado?' · 🔒 CERRADO':'');
   $('macs').innerHTML = savedMacs.map(function(m){
-    return '<span class="macchip saved">✓ '+m.replace(/(..)(?=.)/g,'$1:')+'</span>';
+    return '<span class="macchip saved" title="'+(m.pos||'sin ubicación')+'">✓ '+m.mac.replace(/(..)(?=.)/g,'$1:')+(m.pos?(' · '+m.pos):'')+'</span>';
   }).concat(macsSesion.map(function(m){
-    return '<span class="macchip">'+m.replace(/(..)(?=.)/g,'$1:')+'</span>';
+    return '<span class="macchip" title="'+(m.pos||'sin ubicación')+'">'+m.mac.replace(/(..)(?=.)/g,'$1:')+(m.pos?(' · '+m.pos):'')+'</span>';
   })).join('');
   persistirSesion();
 }
