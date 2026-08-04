@@ -380,6 +380,13 @@ function toast(msg,esError){
 }
 function norm(s){return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
 function esMac(s){var t=String(s||'').toUpperCase().replace(/[^0-9A-F]/g,'');return /^[0-9A-F]{12}$/.test(t)?t:null;}
+function esMacLibre(it){
+  if(!it || !BOOT || !BOOT.macLibre) return false;
+  var c=String(it.c||'').trim(), n=norm(it.n||'');
+  return BOOT.macLibre.some(function(x){
+    return (c && String(x.c||'').trim()===c) || (!c && n && norm(x.n||'')===n);
+  });
+}
 function beep(freq){try{var a=new (window.AudioContext||window.webkitAudioContext)();var o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.frequency.value=freq||880;g.gain.value=.15;o.start();setTimeout(function(){o.stop();a.close();},120);}catch(e){}}
 
 // ---- toggle de ambiente (producción / prueba) ----
@@ -629,6 +636,14 @@ $('scan').addEventListener('keydown',function(ev){
 function procesarScan(raw){
   raw=String(raw||'').trim();
   if(!raw) return;
+  // Artículo habilitado para MAC de formato libre: aceptar cualquier lectura.
+  if(sel && esMacLibre(sel)){
+    if(conteoCerrado){ toast('Este conteo está cerrado. Reábrelo para agregar.',true); beep(220); return; }
+    var vlibre=raw.toUpperCase();
+    if(savedMacs.some(function(x){return x.mac===vlibre;})){ toast('Lectura ya guardada en este conteo',true); beep(220); return; }
+    if(macsSesion.some(function(x){return x.mac===vlibre;})){ toast('Lectura repetida en esta sesión',true); beep(220); return; }
+    macsSesion.push({mac:vlibre,pos:$('posicion').value.trim()}); beep(880); pintarCaptura(); return;
+  }
   var mac=esMac(raw);
   if(mac){
     if(!sel){ toast('Primero selecciona el artículo',true); beep(220); return; }
@@ -732,6 +747,7 @@ function pintarCaptura(){
   var nuevas=macsSesion.length+manualSesion;
   $('contador').textContent = savedQty+nuevas;
   $('detalleCant').textContent = savedQty+' guardadas + '+nuevas+' nuevas'+(conteoCerrado?' · 🔒 CERRADO':'');
+  var _si=$('scan'); if(_si) _si.placeholder=(sel && esMacLibre(sel))?'Escanea aquí… (formato libre)':'Escanea aquí…';
   $('macs').innerHTML = savedMacs.map(function(m){
     return '<span class="macchip saved" title="'+(m.pos||'sin ubicación')+'">✓ '+m.mac.replace(/(..)(?=.)/g,'$1:')+(m.pos?(' · '+m.pos):'')+'</span>';
   }).concat(macsSesion.map(function(m){
