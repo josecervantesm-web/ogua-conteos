@@ -1219,6 +1219,44 @@ var _impChk=false;       // ya se ofreció recuperar importación sin cerrar
 function normMacImp(s){ var t=String(s||'').toUpperCase().replace(/[^0-9A-F]/g,''); return t||''; }
 function fmtMac(v){ return String(v||'').replace(/(..)(?=.)/g,'$1:'); }
 
+// Extrae las MACs esperadas de un libro de Excel.
+// Si detecta encabezados "MAC" (por ejemplo el formato de cajas 箱1/箱2… con columnas
+// MAC | SN), lee SOLO las columnas "MAC" e ignora las "SN". Si no hay ningún encabezado
+// "MAC", cae a modo genérico: toma cualquier celda con formato de MAC (12 hex). Deduplica.
+function parseMacsFromWorkbook(wb){
+  var out=[], seen={}, huboHeaderMac=false, nCols=0;
+  wb.SheetNames.forEach(function(nm){
+    var filas=XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,blankrows:false});
+    var hRow=-1, macCols=[];
+    for(var i=0;i<Math.min(filas.length,10);i++){
+      var cols=[];
+      (filas[i]||[]).forEach(function(cel,ci){
+        var h=String(cel==null?'':cel).trim().toUpperCase();
+        if(h.indexOf('MAC')===0) cols.push(ci); // empieza por "MAC" (excluye SN/SERIAL)
+      });
+      if(cols.length){ hRow=i; macCols=cols; break; }
+    }
+    if(hRow>=0){
+      huboHeaderMac=true; nCols+=macCols.length;
+      for(var r=hRow+1;r<filas.length;r++){
+        macCols.forEach(function(ci){
+          var v=normMacImp((filas[r]||[])[ci]);
+          if(v && /^[0-9A-F]{12}$/.test(v) && !seen[v]){ seen[v]=true; out.push(v); }
+        });
+      }
+    }
+  });
+  if(huboHeaderMac) return {macs:out, modo:'mac', cols:nCols};
+  wb.SheetNames.forEach(function(nm){
+    var filas=XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,blankrows:false});
+    filas.forEach(function(fila){ (fila||[]).forEach(function(cel){
+      var v=normMacImp(cel);
+      if(v && /^[0-9A-F]{12}$/.test(v) && !seen[v]){ seen[v]=true; out.push(v); }
+    }); });
+  });
+  return {macs:out, modo:'generico', cols:0};
+}
+
 // ---- leer Excel de MACs esperadas (en el navegador, con SheetJS) ----
 $('btnImpFile').onclick=function(){ $('impFile').value=''; $('impFile').click(); };
 $('impFile').addEventListener('change',function(){
@@ -1229,22 +1267,11 @@ $('impFile').addEventListener('change',function(){
   rd.onload=function(e){
     try{
       var wb=XLSX.read(e.target.result,{type:'array'});
-      var macs=[], todas=[];
-      wb.SheetNames.forEach(function(nm){
-        var filas=XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,blankrows:false});
-        filas.forEach(function(fila){
-          (fila||[]).forEach(function(cel){
-            var v=normMacImp(cel);
-            if(v){ todas.push(v); if(/^[0-9A-F]{12}$/.test(v)) macs.push(v); }
-          });
-        });
-      });
-      var fuente = macs.length ? macs : todas;
-      var set={}, unic=[];
-      fuente.forEach(function(v){ if(!set[v]){ set[v]=true; unic.push(v); } });
-      impEspCargadas=unic;
-      if(!unic.length){ $('impEspInfo').innerHTML='<span style="color:var(--err)">No encontré MACs en el archivo. Revisa que tenga una columna con las MAC.</span>'; return; }
-      $('impEspInfo').innerHTML='✅ <b>'+unic.length+'</b> MACs esperadas cargadas de <b>'+f.name+'</b>'+(macs.length&&macs.length!==todas.length?' (se ignoraron celdas que no eran MAC)':'');
+      var r=parseMacsFromWorkbook(wb);
+      impEspCargadas=r.macs;
+      if(!r.macs.length){ $('impEspInfo').innerHTML='<span style="color:var(--err)">No encontré MACs en el archivo. Revisa que tenga una columna con las MAC.</span>'; return; }
+      var nota = r.modo==='mac' ? (' · leí '+r.cols+' columna'+(r.cols>1?'s':'')+' "MAC" (ignoré las "SN")') : '';
+      $('impEspInfo').innerHTML='✅ <b>'+r.macs.length+'</b> MACs esperadas cargadas de <b>'+f.name+'</b>'+nota;
     }catch(err){
       $('impEspInfo').innerHTML='<span style="color:var(--err)">No pude leer el archivo: '+String(err.message||err)+'</span>';
     }
