@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#0f1420; --card:#1a2232; --card2:#222c42; --line:#2e3a55;
@@ -327,6 +328,65 @@
     </div>
   </section>
 
+  <!-- ================= IMPORTACIÓN ================= -->
+  <section id="v-import" class="hide">
+    <div class="card" id="impCabecera">
+      <h2>📥 Nueva importación</h2>
+      <div class="row">
+        <div><label>N° importación / guía</label><input id="impNum" placeholder="Ej: IMP-2026-014" autocomplete="off"></div>
+        <div><label>Bodega destino</label><select id="impBodega"><option value="">Elige bodega…</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>Proveedor</label><input id="impProv" placeholder="Proveedor" autocomplete="off"></div>
+        <div><label>Factura / remisión</label><input id="impFact" placeholder="Opcional" autocomplete="off"></div>
+      </div>
+      <label>Excel de MACs esperadas (.xlsx, .xls o .csv)</label>
+      <input type="file" id="impFile" accept=".xlsx,.xls,.csv" class="hide">
+      <button class="btn sec" id="btnImpFile">📄 Subir Excel de MACs esperadas</button>
+      <div id="impEspInfo" style="font-size:12px;color:var(--mut);margin-top:8px"></div>
+      <button class="btn" id="btnImpNueva">🆕 Empezar importación</button>
+    </div>
+
+    <div class="card hide" id="impCaptura">
+      <h2>Escaneo <span id="impHdr" style="font-weight:400;color:var(--mut);font-size:12px"></span></h2>
+      <label>Escáner (pistola o teclado) — MAC + Enter</label>
+      <input id="impScan" placeholder="Escanea aquí…" autocomplete="off" autocapitalize="off">
+      <button class="btn sec" id="btnImpCam">📷 Escanear con cámara</button>
+      <button class="btn sec" id="btnImpFoto">📸 Escanear por foto</button>
+      <div id="impCamFallback" class="hide"></div>
+      <input type="file" id="impFotoScan" accept="image/*" capture="environment" class="hide">
+      <div id="impLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
+
+      <div class="row" style="margin-top:10px">
+        <div class="stat"><b id="impOk" style="color:var(--ok)">0</b><span>OK</span></div>
+        <div class="stat"><b id="impFalt" style="color:var(--warn)">0</b><span>faltantes</span></div>
+        <div class="stat"><b id="impSob" style="color:var(--err)">0</b><span>sobrantes</span></div>
+        <div class="stat"><b id="impDup">0</b><span>duplicadas</span></div>
+      </div>
+      <div class="bar" style="margin-top:8px"><i id="impBar" style="width:0%;background:var(--ok)"></i><b id="impBarTxt">0 / 0 esperadas</b></div>
+
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="btnImpGuardar">💾 Guardar avance</button>
+        <button class="btn ok" id="btnImpCerrar">✅ Guardar y cerrar</button>
+      </div>
+      <button class="btn sec" id="btnImpDescartar">✖ Cerrar sin guardar cambios</button>
+
+      <h3>Resultado</h3>
+      <div class="seg" id="impSeg">
+        <button data-l="falt" class="on">Faltantes</button>
+        <button data-l="sob">Sobrantes</button>
+        <button data-l="ok">OK</button>
+        <button data-l="dup">Duplicadas</button>
+      </div>
+      <div class="list" id="impLista" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Historial de importaciones</h2>
+      <div class="list" id="impHist"></div>
+    </div>
+  </section>
+
 <nav class="tabs">
   <button data-v="conteo" class="on"><span class="ico">🔢</span>Conteo</button>
   <button data-v="pend"><span class="ico">📋</span>Ítems</button>
@@ -334,6 +394,7 @@
   <button data-v="mov"><span class="ico">🔄</span>Movim.</button>
   <button data-v="dash"><span class="ico">📊</span>Dash</button>
   <button data-v="macs"><span class="ico">🔌</span>MACs</button>
+  <button data-v="import"><span class="ico">📥</span>Import.</button>
   <button data-v="conf"><span class="ico">⚙️</span>Config</button>
 </nav>
 
@@ -416,15 +477,17 @@ function iniciar(){
     BOOT=b; MAESTRO=b.maestro.items||[];
     $('subt').textContent = MAESTRO.length+' artículos en maestro · conectado';
     var bods=b.bodegas||[];
-    var zonaSel=$('zona'), pz=$('pendZona'), ub=$('ubiBodega'), cz=$('compZona');
+    var zonaSel=$('zona'), pz=$('pendZona'), ub=$('ubiBodega'), cz=$('compZona'), ib=$('impBodega');
     zonaSel.innerHTML='<option value="">Elige bodega…</option>';
     pz.innerHTML='<option value="">Todas las bodegas</option>';
     if(cz) cz.innerHTML='<option value="">Todas las bodegas</option>';
+    if(ib) ib.innerHTML='<option value="">Elige bodega…</option>';
     ub.innerHTML='';
     bods.forEach(function(z){
       zonaSel.appendChild(new Option(z,z));
       pz.appendChild(new Option(z,z));
       if(cz) cz.appendChild(new Option(z,z));
+      if(ib) ib.appendChild(new Option(z,z));
       ub.appendChild(new Option(z,z));
     });
     var zg=localStorage.getItem('ogua_zona')||'';
@@ -490,7 +553,7 @@ document.querySelectorAll('.tabs button').forEach(function(btn){
   btn.onclick=function(){
     document.querySelectorAll('.tabs button').forEach(function(b){b.classList.remove('on');});
     btn.classList.add('on');
-    ['conteo','pend','comp','mov','dash','macs','conf'].forEach(function(v){
+    ['conteo','pend','comp','mov','dash','macs','import','conf'].forEach(function(v){
       $('v-'+v).classList.toggle('hide', v!==btn.dataset.v);
     });
     if(btn.dataset.v==='pend'){ cargarPendientes(); cargarCerrados(); }
@@ -498,6 +561,7 @@ document.querySelectorAll('.tabs button').forEach(function(btn){
     if(btn.dataset.v==='mov') cargarMovimientos();
     if(btn.dataset.v==='dash') cargarDashboard();
     if(btn.dataset.v==='macs') cargarMacs();
+    if(btn.dataset.v==='import'){ cargarImportaciones(); if(!_impChk){ _impChk=true; if(!imp) restaurarImp(); } }
   };
 });
 
@@ -1142,6 +1206,280 @@ $('btnAddEt').onclick=function(){
   guardarEtiquetas(arr);
   $('etNombre').value='';$('etW').value='';$('etH').value='';
 };
+
+// ============================================================
+//  IMPORTACIONES: registrar MAC por MAC y comparar contra Excel
+// ============================================================
+var imp=null;            // importación en curso
+var impEspCargadas=null; // MACs esperadas leídas del Excel antes de empezar
+var impCam=null;         // instancia de cámara
+var impLente='falt';     // pestaña de resultado activa
+var _impChk=false;       // ya se ofreció recuperar importación sin cerrar
+
+function normMacImp(s){ var t=String(s||'').toUpperCase().replace(/[^0-9A-F]/g,''); return t||''; }
+function fmtMac(v){ return String(v||'').replace(/(..)(?=.)/g,'$1:'); }
+
+// ---- leer Excel de MACs esperadas (en el navegador, con SheetJS) ----
+$('btnImpFile').onclick=function(){ $('impFile').value=''; $('impFile').click(); };
+$('impFile').addEventListener('change',function(){
+  var f=this.files&&this.files[0];
+  if(!f) return;
+  $('impEspInfo').textContent='Leyendo '+f.name+'…';
+  var rd=new FileReader();
+  rd.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var macs=[], todas=[];
+      wb.SheetNames.forEach(function(nm){
+        var filas=XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,blankrows:false});
+        filas.forEach(function(fila){
+          (fila||[]).forEach(function(cel){
+            var v=normMacImp(cel);
+            if(v){ todas.push(v); if(/^[0-9A-F]{12}$/.test(v)) macs.push(v); }
+          });
+        });
+      });
+      var fuente = macs.length ? macs : todas;
+      var set={}, unic=[];
+      fuente.forEach(function(v){ if(!set[v]){ set[v]=true; unic.push(v); } });
+      impEspCargadas=unic;
+      if(!unic.length){ $('impEspInfo').innerHTML='<span style="color:var(--err)">No encontré MACs en el archivo. Revisa que tenga una columna con las MAC.</span>'; return; }
+      $('impEspInfo').innerHTML='✅ <b>'+unic.length+'</b> MACs esperadas cargadas de <b>'+f.name+'</b>'+(macs.length&&macs.length!==todas.length?' (se ignoraron celdas que no eran MAC)':'');
+    }catch(err){
+      $('impEspInfo').innerHTML='<span style="color:var(--err)">No pude leer el archivo: '+String(err.message||err)+'</span>';
+    }
+  };
+  rd.onerror=function(){ $('impEspInfo').innerHTML='<span style="color:var(--err)">No pude leer el archivo.</span>'; };
+  rd.readAsArrayBuffer(f);
+});
+
+// ---- empezar una importación nueva (crea la cabecera en el backend) ----
+$('btnImpNueva').onclick=function(){
+  var usuario=$('usuario').value.trim()||localStorage.getItem('ogua_user')||'';
+  var numero=$('impNum').value.trim();
+  var bodega=$('impBodega').value.trim();
+  if(!numero){ toast('Escribe el N° de importación / guía',true); return; }
+  if(!bodega){ toast('Elige la bodega destino',true); return; }
+  if(!impEspCargadas||!impEspCargadas.length){ toast('Sube primero el Excel de MACs esperadas',true); return; }
+  if(imp && (imp.escaneadas.length) && !confirm('Hay una importación en curso sin cerrar. ¿Descartarla y empezar otra?')) return;
+  var b=$('btnImpNueva'); b.disabled=true; b.textContent='Creando…';
+  gs('guardarImportacion',{
+    numero:numero, proveedor:$('impProv').value.trim(), factura:$('impFact').value.trim(),
+    bodega:bodega, usuario:usuario, estado:'en_proceso',
+    esperadas:impEspCargadas, escaneadas:[]
+  }).then(function(r){
+    imp={ id:r.id, numero:numero, proveedor:$('impProv').value.trim(), factura:$('impFact').value.trim(),
+      bodega:bodega, estado:'en_proceso', esperadas:impEspCargadas.slice(), escaneadas:[], espSet:{} };
+    imp.esperadas.forEach(function(v){ imp.espSet[v]=true; });
+    abrirCapturaImp();
+    toast('Importación creada. Empieza a escanear.');
+    cargarImportaciones();
+  }).catch(function(e){ toast(String(e.message||e),true); })
+    .finally(function(){ b.disabled=false; b.textContent='🆕 Empezar importación'; });
+};
+
+function abrirCapturaImp(){
+  $('impCaptura').classList.remove('hide');
+  $('impHdr').textContent='· '+imp.numero+' · '+imp.bodega+(imp.estado==='cerrada'?' · 🔒 cerrada':'');
+  compararImp();
+  persistImp();
+  setTimeout(function(){ var s=$('impScan'); if(s) s.focus(); },50);
+}
+
+// ---- captura por pistola / teclado ----
+$('impScan').addEventListener('keydown',function(ev){
+  if(ev.key!=='Enter') return;
+  ev.preventDefault();
+  impProcesarScan(this.value); this.value='';
+});
+function impProcesarScan(raw){
+  raw=String(raw||'').trim();
+  if(!raw) return;
+  if(!imp){ toast('Primero empieza una importación',true); beep(220); return; }
+  var v=normMacImp(raw);
+  if(!/^[0-9A-F]{12}$/.test(v)){
+    if(!(imp.esperadas.length && !/^[0-9A-F]{12}$/.test(imp.esperadas[0]))){
+      toast('⚠ No parece una MAC válida (12 hex)',true); beep(220); return;
+    }
+  }
+  if(!v){ toast('Lectura vacía',true); beep(220); return; }
+  var yaEsc=imp.escaneadas.indexOf(v)>=0;
+  imp.escaneadas.push(v);
+  if(yaEsc){ toast('⚠ Duplicada: '+fmtMac(v),true); beep(330); }
+  else if(imp.espSet[v]){ toast('✅ OK: '+fmtMac(v)); beep(880); }
+  else { toast('➕ Sobrante (no esperada): '+fmtMac(v),true); beep(520); }
+  compararImp(); persistImp();
+}
+
+// ---- captura por cámara (en vivo) ----
+$('btnImpCam').onclick=function(){
+  var div=$('impLector');
+  if(!div.classList.contains('hide')){ pararCamaraImp(); return; }
+  if(!imp){ toast('Primero empieza una importación',true); return; }
+  div.classList.remove('hide'); $('btnImpCam').textContent='⏹ Detener cámara';
+  impCam=new Html5Qrcode('impLector');
+  impCam.start({facingMode:'environment'},{fps:8,qrbox:{width:260,height:140}},
+    function(texto){ impProcesarScan(texto); },
+    function(){}
+  ).catch(function(e){
+    pararCamaraImp();
+    var msg=String(e&&e.message||e);
+    if(/NotAllowed|Permission|denied/i.test(msg)){
+      toast('Permiso de cámara denegado: actívalo en el candado de la barra de direcciones',true);
+    } else { toast('No pude abrir la cámara: '+msg,true); }
+  });
+};
+$('btnImpFoto').onclick=function(){
+  if(!imp){ toast('Primero empieza una importación',true); return; }
+  $('impFotoScan').value=''; $('impFotoScan').click();
+};
+$('impFotoScan').addEventListener('change',function(){
+  var f=this.files&&this.files[0]; if(!f) return;
+  toast('Leyendo imagen…');
+  var esc=new Html5Qrcode('impLector');
+  esc.scanFile(f,false).then(function(texto){ impProcesarScan(texto); })
+    .catch(function(){ toast('No detecté ningún código en la foto.',true); beep(220); })
+    .finally(function(){ try{esc.clear();}catch(e){} });
+});
+function pararCamaraImp(){
+  var div=$('impLector');
+  if(impCam){ try{impCam.stop().then(function(){impCam.clear();});}catch(e){} impCam=null; }
+  div.classList.add('hide'); $('btnImpCam').textContent='📷 Escanear con cámara';
+}
+
+// ---- comparación en vivo (cliente) ----
+function compararImp(){
+  if(!imp) return;
+  var vistos={}, dup={}, escUnic=[];
+  imp.escaneadas.forEach(function(v){ if(vistos[v]) dup[v]=true; else { vistos[v]=true; escUnic.push(v); } });
+  var ok=[], sob=[];
+  escUnic.forEach(function(v){ if(imp.espSet[v]) ok.push(v); else sob.push(v); });
+  var falt=imp.esperadas.filter(function(v){ return !vistos[v]; });
+  var dupl=Object.keys(dup);
+  imp._r={ok:ok,falt:falt,sob:sob,dup:dupl};
+  $('impOk').textContent=ok.length;
+  $('impFalt').textContent=falt.length;
+  $('impSob').textContent=sob.length;
+  $('impDup').textContent=dupl.length;
+  var tot=imp.esperadas.length;
+  var pct=tot?Math.round(ok.length/tot*100):0;
+  $('impBar').style.width=pct+'%';
+  $('impBarTxt').textContent=ok.length+' / '+tot+' esperadas ('+pct+'%)';
+  pintarListaImp();
+}
+function pintarListaImp(){
+  if(!imp||!imp._r){ $('impLista').innerHTML=''; return; }
+  var mapa={falt:{arr:imp._r.falt,c:'var(--warn)',t:'Faltantes (esperadas sin escanear)'},
+    sob:{arr:imp._r.sob,c:'var(--err)',t:'Sobrantes (escaneadas no esperadas)'},
+    ok:{arr:imp._r.ok,c:'var(--ok)',t:'Coincidencias OK'},
+    dup:{arr:imp._r.dup,c:'var(--mut)',t:'Duplicadas (escaneadas más de una vez)'}};
+  var d=mapa[impLente]||mapa.falt;
+  if(!d.arr.length){ $('impLista').innerHTML='<div class="item" style="color:var(--mut)">Sin '+d.t.toLowerCase()+'</div>'; return; }
+  $('impLista').innerHTML=d.arr.map(function(v){
+    return '<div class="item"><span style="font-family:monospace;color:'+d.c+'">'+fmtMac(v)+'</span></div>';
+  }).join('');
+}
+document.querySelectorAll('#impSeg button').forEach(function(b){
+  b.onclick=function(){
+    impLente=b.dataset.l;
+    document.querySelectorAll('#impSeg button').forEach(function(x){ x.classList.toggle('on',x===b); });
+    pintarListaImp();
+  };
+});
+
+// ---- respaldo local para no perder el escaneo ----
+function persistImp(){
+  try{
+    if(imp) localStorage.setItem('ogua_import',JSON.stringify({id:imp.id,numero:imp.numero,proveedor:imp.proveedor,factura:imp.factura,bodega:imp.bodega,estado:imp.estado,esperadas:imp.esperadas,escaneadas:imp.escaneadas}));
+    else localStorage.removeItem('ogua_import');
+  }catch(e){}
+}
+function restaurarImp(){
+  var s=null; try{ s=JSON.parse(localStorage.getItem('ogua_import')||'null'); }catch(e){}
+  if(!s||!s.id) return;
+  if(!confirm('Hay una importación sin cerrar: "'+s.numero+'" con '+(s.escaneadas||[]).length+' MACs escaneadas. ¿Retomarla?')){
+    localStorage.removeItem('ogua_import'); return;
+  }
+  imp={id:s.id,numero:s.numero,proveedor:s.proveedor,factura:s.factura,bodega:s.bodega,estado:s.estado||'en_proceso',esperadas:s.esperadas||[],escaneadas:s.escaneadas||[],espSet:{}};
+  imp.esperadas.forEach(function(v){ imp.espSet[v]=true; });
+  abrirCapturaImp();
+}
+
+// ---- guardar / cerrar ----
+function guardarImp(estado){
+  if(!imp){ toast('No hay importación activa',true); return; }
+  var usuario=$('usuario').value.trim()||localStorage.getItem('ogua_user')||'';
+  var b1=$('btnImpGuardar'), b2=$('btnImpCerrar');
+  b1.disabled=b2.disabled=true;
+  return gs('guardarImportacion',{
+    id:imp.id, numero:imp.numero, proveedor:imp.proveedor, factura:imp.factura,
+    bodega:imp.bodega, usuario:usuario, estado:estado,
+    esperadas:imp.esperadas, escaneadas:imp.escaneadas
+  }).then(function(){
+    imp.estado=estado;
+    if(estado==='cerrada'){
+      toast('Importación '+imp.numero+' cerrada ✅');
+      pararCamaraImp();
+      imp=null; localStorage.removeItem('ogua_import');
+      $('impCaptura').classList.add('hide');
+      $('impNum').value=''; $('impProv').value=''; $('impFact').value='';
+      $('impEspInfo').textContent=''; impEspCargadas=null;
+    }else{
+      toast('Avance guardado');
+      $('impHdr').textContent='· '+imp.numero+' · '+imp.bodega;
+    }
+    cargarImportaciones();
+  }).catch(function(e){ toast(String(e.message||e),true); })
+    .finally(function(){ b1.disabled=b2.disabled=false; });
+}
+$('btnImpGuardar').onclick=function(){ guardarImp('en_proceso'); };
+$('btnImpCerrar').onclick=function(){
+  if(!imp) return;
+  var r=imp._r||{falt:[],sob:[]};
+  if((r.falt.length||r.sob.length) && !confirm('Vas a cerrar con '+r.falt.length+' faltantes y '+r.sob.length+' sobrantes. ¿Continuar?')) return;
+  guardarImp('cerrada');
+};
+$('btnImpDescartar').onclick=function(){
+  if(imp && imp.escaneadas.length && !confirm('¿Cerrar sin guardar los cambios no guardados de esta sesión?')) return;
+  pararCamaraImp();
+  imp=null; localStorage.removeItem('ogua_import');
+  $('impCaptura').classList.add('hide');
+};
+
+// ---- historial ----
+var IMPS=[];
+function cargarImportaciones(){
+  $('impHist').innerHTML='<div class="item">Cargando…</div>';
+  gs('getImportaciones').then(function(list){
+    IMPS=list;
+    if(!list.length){ $('impHist').innerHTML='<div class="item" style="color:var(--mut)">Aún no hay importaciones</div>'; return; }
+    $('impHist').innerHTML=list.map(function(im,i){
+      var pill = im.estado==='cerrada'
+        ? (im.faltantes===0&&im.sobrantes===0 ? '<span class="pill p-ok">Cerrada ✓</span>' : '<span class="pill p-warn">Cerrada con dif.</span>')
+        : '<span class="pill p-mut">En proceso</span>';
+      var dif=(im.faltantes?(' · <span style="color:var(--warn)">'+im.faltantes+' falt</span>'):'')
+        +(im.sobrantes?(' · <span style="color:var(--err)">'+im.sobrantes+' sob</span>'):'')
+        +(im.duplicadas?(' · '+im.duplicadas+' dup'):'');
+      return '<div class="item" style="cursor:pointer" onclick="abrirImportacion('+i+')"><div><b>'+im.numero+'</b>'
+        +'<small>'+im.bodega+(im.proveedor?(' · '+im.proveedor):'')+' · '+im.ok+'/'+im.esperadas+' OK'+dif+' · '+im.fecha+'</small></div>'+pill+'</div>';
+    }).join('');
+  }).catch(function(e){ $('impHist').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
+}
+function abrirImportacion(i){
+  var im=IMPS[i]; if(!im) return;
+  if(imp && imp.escaneadas.length && imp.id!==im.id && !confirm('Tienes una importación en curso. ¿Cambiar a esta?')) return;
+  gs('getImportacion',im.id).then(function(d){
+    imp={id:d.id,numero:d.numero,proveedor:d.proveedor,factura:d.factura,bodega:d.bodega,estado:d.estado,esperadas:d.esperadas||[],escaneadas:d.escaneadas||[],espSet:{}};
+    imp.esperadas.forEach(function(v){ imp.espSet[v]=true; });
+    $('impNum').value=d.numero; $('impProv').value=d.proveedor; $('impFact').value=d.factura;
+    if($('impBodega').querySelector('option[value="'+d.bodega+'"]')) $('impBodega').value=d.bodega;
+    impEspCargadas=imp.esperadas.slice();
+    $('impEspInfo').innerHTML='📄 '+imp.esperadas.length+' MACs esperadas (de la importación guardada)';
+    abrirCapturaImp();
+    window.scrollTo(0,0);
+    toast('Importación '+d.numero+' abierta'+(d.estado==='cerrada'?' (cerrada — puedes reabrir guardando)':''));
+  }).catch(function(e){ toast(String(e.message||e),true); });
+}
 </script>
 </body>
 </html>
