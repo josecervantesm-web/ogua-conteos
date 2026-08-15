@@ -68,7 +68,7 @@
   #plInfo{line-height:1.2}
   #plCodes{display:flex;align-items:center;gap:2mm}
   @media print{
-    body.print-et header, body.print-et main, body.print-et nav, body.print-et .toast, body.print-et .modal{display:none !important}
+    body.print-et > *{display:none !important}
     body.print-et #printLabel{display:flex !important}
   }
   #setup{position:fixed;inset:0;background:var(--bg);z-index:200;padding:20px;overflow:auto}
