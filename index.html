@@ -305,6 +305,23 @@
   </div>
 </div>
 
+<div id="rackModal" class="modal hide">
+  <div class="mcard">
+    <h2 style="margin:0 0 8px;font-size:16px">🏷 Etiqueta de rack</h2>
+    <div id="rackQr" style="display:flex;justify-content:center;padding:10px;background:#fff"></div>
+    <div id="rackInfo" style="font-size:13px;text-align:left;margin:8px auto;color:#111;line-height:1.5;max-width:280px"></div>
+    <label style="color:#333;font-size:12px;text-align:left;display:block;margin:6px 0 3px">Tamaño de etiqueta</label>
+    <select id="rackSize2" style="background:#f4f4f4;color:#111;border:1px solid #ccc"></select>
+    <div id="rackCustomWrap" class="row hide" style="margin-top:6px">
+      <input id="rackW2" type="number" min="20" inputmode="numeric" placeholder="Ancho mm" style="background:#f4f4f4;color:#111;border:1px solid #ccc">
+      <input id="rackH2" type="number" min="10" inputmode="numeric" placeholder="Alto mm" style="background:#f4f4f4;color:#111;border:1px solid #ccc">
+    </div>
+    <button class="btn" id="btnRackImprimir">🖨 Imprimir</button>
+    <button class="btn sec" id="btnRackZpl">⬇ Descargar ZPL (Zebra)</button>
+    <button class="btn sec" id="btnRackCerrar">Cerrar</button>
+  </div>
+</div>
+
 <style id="pageStyle"></style>
 <div id="printLabel">
   <div id="plName"></div>
@@ -387,6 +404,31 @@
     </div>
   </section>
 
+  <!-- ================= RACKS ================= -->
+  <section id="v-rack" class="hide">
+    <div class="card">
+      <h2>🏷 Etiquetar rack</h2>
+      <div class="row">
+        <div><label>Bodega</label><select id="rackBodega"><option value="">Elige bodega…</option></select></div>
+        <div><label>Ubicación / rack</label><input id="rackUbi" list="rackUbiDl" placeholder="Ej: Rack 3 · Nivel 2" autocomplete="off"><datalist id="rackUbiDl"></datalist></div>
+      </div>
+      <label>Artículo (busca por nombre o código Artemis)</label>
+      <div class="sug">
+        <input id="rackBuscar" placeholder="Buscar artículo…" autocomplete="off">
+        <div class="opts hide" id="rackOpts"></div>
+      </div>
+      <div id="rackSel" class="hide" style="margin-top:8px">
+        <b id="rackNombre"></b><br><small id="rackCodigo" style="color:var(--mut)"></small>
+      </div>
+      <button class="btn" id="btnRackGen">🏷 Generar etiqueta</button>
+    </div>
+    <div class="card">
+      <h2>Racks etiquetados</h2>
+      <input id="rackFiltro" placeholder="Filtrar por ubicación, código o artículo…" autocomplete="off">
+      <div class="list" id="rackHist" style="margin-top:8px"></div>
+    </div>
+  </section>
+
 <nav class="tabs">
   <button data-v="conteo" class="on"><span class="ico">🔢</span>Conteo</button>
   <button data-v="pend"><span class="ico">📋</span>Ítems</button>
@@ -395,6 +437,7 @@
   <button data-v="dash"><span class="ico">📊</span>Dash</button>
   <button data-v="macs"><span class="ico">🔌</span>MACs</button>
   <button data-v="import"><span class="ico">📥</span>Import.</button>
+  <button data-v="rack"><span class="ico">🏷</span>Racks</button>
   <button data-v="conf"><span class="ico">⚙️</span>Config</button>
 </nav>
 
@@ -477,17 +520,19 @@ function iniciar(){
     BOOT=b; MAESTRO=b.maestro.items||[];
     $('subt').textContent = MAESTRO.length+' artículos en maestro · conectado';
     var bods=b.bodegas||[];
-    var zonaSel=$('zona'), pz=$('pendZona'), ub=$('ubiBodega'), cz=$('compZona'), ib=$('impBodega');
+    var zonaSel=$('zona'), pz=$('pendZona'), ub=$('ubiBodega'), cz=$('compZona'), ib=$('impBodega'), rb=$('rackBodega');
     zonaSel.innerHTML='<option value="">Elige bodega…</option>';
     pz.innerHTML='<option value="">Todas las bodegas</option>';
     if(cz) cz.innerHTML='<option value="">Todas las bodegas</option>';
     if(ib) ib.innerHTML='<option value="">Elige bodega…</option>';
+    if(rb) rb.innerHTML='<option value="">Elige bodega…</option>';
     ub.innerHTML='';
     bods.forEach(function(z){
       zonaSel.appendChild(new Option(z,z));
       pz.appendChild(new Option(z,z));
       if(cz) cz.appendChild(new Option(z,z));
       if(ib) ib.appendChild(new Option(z,z));
+      if(rb) rb.appendChild(new Option(z,z));
       ub.appendChild(new Option(z,z));
     });
     var zg=localStorage.getItem('ogua_zona')||'';
@@ -553,7 +598,7 @@ document.querySelectorAll('.tabs button').forEach(function(btn){
   btn.onclick=function(){
     document.querySelectorAll('.tabs button').forEach(function(b){b.classList.remove('on');});
     btn.classList.add('on');
-    ['conteo','pend','comp','mov','dash','macs','import','conf'].forEach(function(v){
+    ['conteo','pend','comp','mov','dash','macs','import','rack','conf'].forEach(function(v){
       $('v-'+v).classList.toggle('hide', v!==btn.dataset.v);
     });
     if(btn.dataset.v==='pend'){ cargarPendientes(); cargarCerrados(); }
@@ -562,6 +607,7 @@ document.querySelectorAll('.tabs button').forEach(function(btn){
     if(btn.dataset.v==='dash') cargarDashboard();
     if(btn.dataset.v==='macs') cargarMacs();
     if(btn.dataset.v==='import'){ cargarImportaciones(); if(!_impChk){ _impChk=true; if(!imp) restaurarImp(); } }
+    if(btn.dataset.v==='rack'){ pintarRackUbi(); cargarRacks(); }
   };
 });
 
@@ -1220,33 +1266,31 @@ function normMacImp(s){ var t=String(s||'').toUpperCase().replace(/[^0-9A-F]/g,'
 function fmtMac(v){ return String(v||'').replace(/(..)(?=.)/g,'$1:'); }
 
 // Extrae las MACs esperadas de un libro de Excel.
-// Si detecta encabezados "MAC" (por ejemplo el formato de cajas 箱1/箱2… con columnas
-// MAC | SN), lee SOLO las columnas "MAC" e ignora las "SN". Si no hay ningún encabezado
-// "MAC", cae a modo genérico: toma cualquier celda con formato de MAC (12 hex). Deduplica.
+// Consciente de la estructura: recorre TODAS las filas y, cada vez que aparece una fila de
+// encabezado con celdas "MAC" (formato de cajas 箱1/箱2… con columnas MAC | SN, incluso
+// apilado en varios bloques hacia abajo), re-detecta las columnas "MAC" de ese bloque y
+// lee SOLO esas columnas — ignora las "SN". Si no hay ningún encabezado "MAC", cae a modo
+// genérico: toma cualquier celda con formato de MAC (12 hex). Deduplica siempre.
 function parseMacsFromWorkbook(wb){
-  var out=[], seen={}, huboHeaderMac=false, nCols=0;
+  var out=[], seen={}, huboHeaderMac=false, nCols=0, bloques=0;
   wb.SheetNames.forEach(function(nm){
     var filas=XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,blankrows:false});
-    var hRow=-1, macCols=[];
-    for(var i=0;i<Math.min(filas.length,10);i++){
+    var macCols=null; // columnas "MAC" vigentes del bloque actual
+    filas.forEach(function(fila){
+      fila=fila||[];
       var cols=[];
-      (filas[i]||[]).forEach(function(cel,ci){
+      fila.forEach(function(cel,ci){
         var h=String(cel==null?'':cel).trim().toUpperCase();
         if(h.indexOf('MAC')===0) cols.push(ci); // empieza por "MAC" (excluye SN/SERIAL)
       });
-      if(cols.length){ hRow=i; macCols=cols; break; }
-    }
-    if(hRow>=0){
-      huboHeaderMac=true; nCols+=macCols.length;
-      for(var r=hRow+1;r<filas.length;r++){
-        macCols.forEach(function(ci){
-          var v=normMacImp((filas[r]||[])[ci]);
-          if(v && /^[0-9A-F]{12}$/.test(v) && !seen[v]){ seen[v]=true; out.push(v); }
-        });
-      }
-    }
+      if(cols.length){ macCols=cols; huboHeaderMac=true; bloques++; if(cols.length>nCols) nCols=cols.length; return; }
+      if(macCols) macCols.forEach(function(ci){
+        var v=normMacImp(fila[ci]);
+        if(v && /^[0-9A-F]{12}$/.test(v) && !seen[v]){ seen[v]=true; out.push(v); }
+      });
+    });
   });
-  if(huboHeaderMac) return {macs:out, modo:'mac', cols:nCols};
+  if(huboHeaderMac) return {macs:out, modo:'mac', cols:nCols, bloques:bloques};
   wb.SheetNames.forEach(function(nm){
     var filas=XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,blankrows:false});
     filas.forEach(function(fila){ (fila||[]).forEach(function(cel){
@@ -1254,7 +1298,7 @@ function parseMacsFromWorkbook(wb){
       if(v && /^[0-9A-F]{12}$/.test(v) && !seen[v]){ seen[v]=true; out.push(v); }
     }); });
   });
-  return {macs:out, modo:'generico', cols:0};
+  return {macs:out, modo:'generico', cols:0, bloques:0};
 }
 
 // ---- leer Excel de MACs esperadas (en el navegador, con SheetJS) ----
@@ -1270,7 +1314,7 @@ $('impFile').addEventListener('change',function(){
       var r=parseMacsFromWorkbook(wb);
       impEspCargadas=r.macs;
       if(!r.macs.length){ $('impEspInfo').innerHTML='<span style="color:var(--err)">No encontré MACs en el archivo. Revisa que tenga una columna con las MAC.</span>'; return; }
-      var nota = r.modo==='mac' ? (' · leí '+r.cols+' columna'+(r.cols>1?'s':'')+' "MAC" (ignoré las "SN")') : '';
+      var nota = r.modo==='mac' ? (' · '+r.cols+' columna'+(r.cols>1?'s':'')+' "MAC" en '+r.bloques+' bloque'+(r.bloques>1?'s':'')+' (ignoré las "SN")') : '';
       $('impEspInfo').innerHTML='✅ <b>'+r.macs.length+'</b> MACs esperadas cargadas de <b>'+f.name+'</b>'+nota;
     }catch(err){
       $('impEspInfo').innerHTML='<span style="color:var(--err)">No pude leer el archivo: '+String(err.message||err)+'</span>';
@@ -1507,6 +1551,135 @@ function abrirImportacion(i){
     toast('Importación '+d.numero+' abierta'+(d.estado==='cerrada'?' (cerrada — puedes reabrir guardando)':''));
   }).catch(function(e){ toast(String(e.message||e),true); });
 }
+
+// ============================================================
+//  RACKS: etiquetar ubicaciones con QR (código dinámico versionado)
+// ============================================================
+var rackSel=null;    // artículo seleccionado {c,n,b}
+var rackData=null;   // etiqueta actual {bodega,ubicacion,codigo,nombre,payload}
+var RACKS=[];
+
+function pintarRackUbi(){
+  var dl=$('rackUbiDl'); if(!dl) return; dl.innerHTML='';
+  var b=norm($('rackBodega').value);
+  ((BOOT&&BOOT.ubicaciones)||[]).forEach(function(x){ if(!b||norm(x.b)===b) dl.appendChild(new Option(x.u,x.u)); });
+}
+if($('rackBodega')) $('rackBodega').addEventListener('change',pintarRackUbi);
+
+autocompletar('rackBuscar','rackOpts',function(it){
+  rackSel=it;
+  $('rackSel').classList.remove('hide');
+  $('rackNombre').textContent=it.n;
+  $('rackCodigo').textContent=(it.c?('Código Artemis: '+it.c):'(artículo sin código)');
+});
+
+$('btnRackGen').onclick=function(){
+  var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
+  var bodega=$('rackBodega').value.trim();
+  var ubi=$('rackUbi').value.trim();
+  if(!ubi){ toast('Escribe la ubicación / rack',true); return; }
+  if(!rackSel){ toast('Selecciona el artículo',true); return; }
+  var b=$('btnRackGen'); b.disabled=true; b.textContent='Generando…';
+  gs('guardarRack',{bodega:bodega,ubicacion:ubi,codigo:rackSel.c,nombre:rackSel.n,usuario:usuario}).then(function(r){
+    rackData={bodega:bodega,ubicacion:ubi,codigo:rackSel.c||'',nombre:rackSel.n,payload:r.payload};
+    registrarUbicacionLocal(bodega,ubi);
+    mostrarRackEtiqueta(rackData);
+    cargarRacks();
+  }).catch(function(e){ toast(String(e.message||e),true); })
+    .finally(function(){ b.disabled=false; b.textContent='🏷 Generar etiqueta'; });
+};
+
+function rackSizes(){ return etiquetas_(); }
+function mostrarRackEtiqueta(d){
+  var sel=$('rackSize2'); sel.innerHTML='';
+  rackSizes().forEach(function(e,i){ sel.appendChild(new Option(e.n+' — '+e.w+'x'+e.h+' mm',i)); });
+  sel.appendChild(new Option('Personalizado…','custom'));
+  var last=Number(localStorage.getItem('ogua_rack_size')||0);
+  sel.selectedIndex=(last<rackSizes().length)?last:0;
+  rackToggleCustom();
+  $('rackQr').innerHTML='';
+  try{ new QRCode($('rackQr'),{text:d.payload,width:190,height:190,correctLevel:QRCode.CorrectLevel.M}); }
+  catch(e){ $('rackQr').innerHTML='<small style="color:#c00">QR no disponible</small>'; }
+  $('rackInfo').innerHTML='<div><b>Ubicación:</b> '+d.ubicacion+'</div>'
+    +(d.codigo?('<div><b>Código Artemis:</b> '+d.codigo+'</div>'):'')
+    +'<div><b>Artículo:</b> '+d.nombre+'</div>';
+  $('rackModal').classList.remove('hide');
+}
+function rackToggleCustom(){ $('rackCustomWrap').classList.toggle('hide', $('rackSize2').value!=='custom'); }
+if($('rackSize2')) $('rackSize2').addEventListener('change',rackToggleCustom);
+function rackSizeSel(){
+  var v=$('rackSize2').value;
+  if(v==='custom'){
+    var w=Number($('rackW2').value), h=Number($('rackH2').value);
+    if(!(w>10)||!(h>5)) return null;
+    return {n:'Personalizado',w:w,h:h};
+  }
+  var i=Number(v)||0; localStorage.setItem('ogua_rack_size',i);
+  return rackSizes()[i]||rackSizes()[0];
+}
+if($('btnRackCerrar')) $('btnRackCerrar').onclick=function(){ $('rackModal').classList.add('hide'); };
+
+if($('btnRackImprimir')) $('btnRackImprimir').onclick=function(){
+  if(!rackData) return;
+  var e=rackSizeSel(); if(!e){ toast('Indica ancho y alto (mm) del tamaño personalizado',true); return; }
+  $('pageStyle').textContent='@page{size:'+e.w+'mm '+e.h+'mm;margin:0}';
+  var pl=$('printLabel'); pl.style.width=e.w+'mm'; pl.style.height=e.h+'mm';
+  var chico=e.h<40;
+  $('plName').textContent=rackData.ubicacion;
+  $('plName').style.fontSize=chico?'9pt':'13pt';
+  $('plInfo').textContent=(rackData.codigo?(rackData.codigo+' · '):'')+rackData.nombre;
+  $('plInfo').style.fontSize=chico?'6pt':'8pt';
+  var img=$('plQr'), cv=$('rackQr').querySelector('canvas');
+  var q=Math.min(e.h-14,36);
+  if(cv){ img.src=cv.toDataURL('image/png'); img.style.display='block'; img.style.width=q+'mm'; img.style.height=q+'mm'; }
+  else img.style.display='none';
+  $('plBar').innerHTML=''; $('plBar').style.display='none';
+  document.body.classList.add('print-et');
+  setTimeout(function(){ window.print(); document.body.classList.remove('print-et'); },80);
+};
+
+if($('btnRackZpl')) $('btnRackZpl').onclick=function(){
+  if(!rackData) return;
+  var e=rackSizeSel(); if(!e){ toast('Indica ancho y alto del tamaño personalizado',true); return; }
+  var blob=new Blob([generarZplRack_(rackData,e)],{type:'text/plain'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='rack_'+String(rackData.ubicacion).replace(/[^\w-]/g,'_').slice(0,30)+'.zpl';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('ZPL descargado (203 dpi): envíalo a la Zebra');
+};
+function generarZplRack_(d,e){
+  var W=Math.round(e.w*8), H=Math.round(e.h*8);
+  function t(v){ return String(v==null?'':v).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[\^~]/g,' '); }
+  var chico=e.h<40;
+  var qmag=e.h>=70?5:(e.h>=40?4:3);
+  var x=16, z=['^XA','^CI28','^PW'+W,'^LL'+H,'^LH0,0'];
+  z.push('^FO'+x+',14^BQN,2,'+qmag+'^FDLA,'+t(d.payload)+'^FS');
+  var tx=x+(qmag*30)+16;
+  z.push('^FO'+tx+',16^A0N,'+(chico?24:30)+','+(chico?24:30)+'^FB'+(W-tx-10)+',1,0,L^FD'+t(d.ubicacion)+'^FS');
+  z.push('^FO'+tx+','+(chico?48:64)+'^A0N,20,20^FB'+(W-tx-10)+',2,2,L^FD'+(d.codigo?t(d.codigo)+' - ':'')+t(d.nombre)+'^FS');
+  z.push('^XZ');
+  return z.join('\n');
+}
+
+// ---- historial de racks ----
+function cargarRacks(){
+  $('rackHist').innerHTML='<div class="item">Cargando…</div>';
+  gs('getRacks',$('rackFiltro').value.trim()).then(function(list){
+    RACKS=list;
+    if(!list.length){ $('rackHist').innerHTML='<div class="item" style="color:var(--mut)">Aún no hay racks etiquetados</div>'; return; }
+    $('rackHist').innerHTML=list.map(function(r,i){
+      return '<div class="item"><div><b>'+r.ubicacion+'</b><small>'+(r.codigo?r.codigo+' · ':'')+r.nombre+(r.bodega?(' · '+r.bodega):'')+' · '+r.fecha+'</small></div>'
+        +'<button class="btn sec" style="margin-top:0;padding:5px 10px;width:auto;flex:0 0 auto" onclick="reimprimirRack('+i+')">🏷 Reimprimir</button></div>';
+    }).join('');
+  }).catch(function(e){ $('rackHist').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
+}
+function reimprimirRack(i){
+  var r=RACKS[i]; if(!r) return;
+  rackData={bodega:r.bodega,ubicacion:r.ubicacion,codigo:r.codigo,nombre:r.nombre,payload:r.payload};
+  mostrarRackEtiqueta(rackData);
+}
+var _rackFiltroT=null;
+if($('rackFiltro')) $('rackFiltro').addEventListener('input',function(){ clearTimeout(_rackFiltroT); _rackFiltroT=setTimeout(cargarRacks,300); });
 </script>
 </body>
 </html>
