@@ -68,16 +68,19 @@
   #plInfo{line-height:1.2}
   #plCodes{display:flex;align-items:center;gap:2mm}
   #printSheet{display:none}
-  .rcell{box-sizing:border-box;border:1px dashed #bbb;display:flex;align-items:center;gap:2mm;padding:1.5mm;overflow:hidden;background:#fff;color:#000;break-inside:avoid;page-break-inside:avoid}
-  .rcell .rq img{display:block}
-  .rcell .rt{flex:1;min-width:0;overflow:hidden}
-  .rcell .ru{font-weight:700;line-height:1.1;word-break:break-word}
-  .rcell .rc{color:#222;line-height:1.15;word-break:break-word}
+  .psheet{position:relative;overflow:hidden;background:#fff;page-break-after:always;break-after:page}
+  .psheet:last-child{page-break-after:auto;break-after:auto}
+  .pcell{position:absolute;box-sizing:border-box;display:flex;align-items:center;overflow:hidden;color:#000}
+  .pcell.test{border:1px dashed #999}
+  .pcell .rq img{display:block}
+  .pcell .rt{flex:1;min-width:0;overflow:hidden}
+  .pcell .ru{font-weight:700;line-height:1.05;word-break:break-word}
+  .pcell .rc{color:#222;line-height:1.1;word-break:break-word}
   @media print{
     body.print-et > *{display:none !important}
     body.print-et #printLabel{display:flex !important}
     body.print-sheet > *{display:none !important}
-    body.print-sheet #printSheet{display:flex !important;flex-wrap:wrap;gap:3mm;align-content:flex-start}
+    body.print-sheet #printSheet{display:block !important}
   }
   #setup{position:fixed;inset:0;background:var(--bg);z-index:200;padding:20px;overflow:auto}
   .mini{border:1px solid var(--line);background:var(--card2);color:var(--txt);border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
@@ -280,6 +283,43 @@
       <button class="btn sec" id="btnAddEt">＋ Agregar etiqueta</button>
     </div>
     <div class="card">
+      <h2>🗒 Plantillas de hoja de etiquetas</h2>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Define el tamaño y la distribución de las etiquetas por hoja (A4/Carta/personalizado) para que caigan exactas en tus etiquetas pre-cortadas. Se usan en la "Hoja de impresión" de Racks. Compartidas con el equipo.</p>
+      <div id="plList"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn sec" id="plA4" style="margin-top:0">Hoja A4</button>
+        <button class="btn sec" id="plCarta" style="margin-top:0">Hoja Carta</button>
+      </div>
+      <label>Nombre</label><input id="plN" placeholder="Ej: A4 · 3×8">
+      <div class="row">
+        <div><label>Ancho hoja mm</label><input id="plPW" type="number" inputmode="decimal"></div>
+        <div><label>Alto hoja mm</label><input id="plPH" type="number" inputmode="decimal"></div>
+      </div>
+      <div class="row">
+        <div><label>Columnas</label><input id="plCols" type="number" min="1" inputmode="numeric"></div>
+        <div><label>Filas</label><input id="plRows" type="number" min="1" inputmode="numeric"></div>
+      </div>
+      <div class="row">
+        <div><label>Ancho etiqueta mm</label><input id="plLW" type="number" inputmode="decimal"></div>
+        <div><label>Alto etiqueta mm</label><input id="plLH" type="number" inputmode="decimal"></div>
+      </div>
+      <div class="row">
+        <div><label>Margen superior mm</label><input id="plMT" type="number" inputmode="decimal"></div>
+        <div><label>Margen izquierdo mm</label><input id="plML" type="number" inputmode="decimal"></div>
+      </div>
+      <div class="row">
+        <div><label>Separación horiz. mm</label><input id="plGX" type="number" inputmode="decimal"></div>
+        <div><label>Separación vert. mm</label><input id="plGY" type="number" inputmode="decimal"></div>
+      </div>
+      <label>Vista previa</label>
+      <div id="plPreview" style="background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;align-items:center"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="btnPlGuardar">💾 Guardar plantilla</button>
+        <button class="btn sec" id="btnPlPrueba">🖨 Prueba de alineación</button>
+      </div>
+      <button class="btn sec" id="btnPlNueva">＋ Nueva (limpiar)</button>
+    </div>
+    <div class="card">
       <h2>Bodegas y ubicaciones</h2>
       <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Las bodegas son fijas: <b id="zonasList"></b></p>
       <label>Nueva ubicación dentro de una bodega</label>
@@ -439,11 +479,11 @@
     <div class="card">
       <h2>🖨 Hoja de impresión <span id="hojaCount" style="color:var(--mut);font-weight:400;font-size:12px"></span></h2>
       <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Junta varias etiquetas —copias del mismo código o códigos distintos— e imprímelas en una sola hoja. Agrega copias desde la vista previa ("Agregar a la hoja") o etiquetas desde el historial ("➕ Hoja").</p>
-      <label>Tamaño de cada etiqueta</label>
-      <select id="hojaSize"></select>
-      <div id="hojaCustomWrap" class="row hide" style="margin-top:6px">
-        <input id="hojaW" type="number" min="20" inputmode="numeric" placeholder="Ancho mm">
-        <input id="hojaH" type="number" min="10" inputmode="numeric" placeholder="Alto mm">
+      <label>Plantilla de hoja <span style="color:var(--mut)">(se configuran en ⚙️ Config)</span></label>
+      <select id="hojaPlantilla"></select>
+      <div class="row" style="margin-top:6px">
+        <div><label>Empezar en la posición #</label><input id="hojaInicio" type="number" min="1" value="1" inputmode="numeric"></div>
+        <div style="align-self:flex-end;color:var(--mut);font-size:12px;padding-bottom:11px" id="hojaInfo"></div>
       </div>
       <div class="list" id="hojaList" style="margin-top:8px"></div>
       <div class="row">
@@ -579,6 +619,7 @@ function iniciar(){
     $('usuario').value = localStorage.getItem('ogua_user')||'';
     $('conUrl').value=API.url; $('conTok').value=API.token;
     pintarEtList();
+    if(typeof pintarPlList==='function'){ pintarPlList(); pintarPlPreview(); }
     restaurarSesion();
     if(b.errorMaestro) toast('Maestro: '+b.errorMaestro,true);
   }).catch(function(e){
@@ -644,7 +685,7 @@ document.querySelectorAll('.tabs button').forEach(function(btn){
     if(btn.dataset.v==='dash') cargarDashboard();
     if(btn.dataset.v==='macs') cargarMacs();
     if(btn.dataset.v==='import'){ cargarImportaciones(); if(!_impChk){ _impChk=true; if(!imp) restaurarImp(); } }
-    if(btn.dataset.v==='rack'){ pintarRackUbi(); cargarRacks(); llenarSizesHoja(); pintarHoja(); }
+    if(btn.dataset.v==='rack'){ pintarRackUbi(); cargarRacks(); llenarPlantillasHoja(); pintarHoja(); }
   };
 });
 
@@ -1753,21 +1794,16 @@ if($('btnRackScan')) $('btnRackScan').onclick=function(){
 
 // ---- Hoja de impresión: varias etiquetas / copias en una misma hoja ----
 var bandeja=[];
-function llenarSizesHoja(){
-  var sel=$('hojaSize'); if(!sel) return;
+function llenarPlantillasHoja(){
+  var sel=$('hojaPlantilla'); if(!sel) return;
   var prev=sel.value; sel.innerHTML='';
-  rackSizes().forEach(function(e,i){ sel.appendChild(new Option(e.n+' — '+e.w+'x'+e.h+' mm',i)); });
-  sel.appendChild(new Option('Personalizado…','custom'));
+  plantillas_().forEach(function(p,i){ sel.appendChild(new Option(p.n,i)); });
   if(prev) sel.value=prev;
-  hojaToggleCustom();
+  pintarHojaInfo();
 }
-function hojaToggleCustom(){ if($('hojaCustomWrap')) $('hojaCustomWrap').classList.toggle('hide', $('hojaSize').value!=='custom'); }
-if($('hojaSize')) $('hojaSize').addEventListener('change',hojaToggleCustom);
-function hojaSizeSel(){
-  var sel=$('hojaSize'); var v=sel.value;
-  if(v==='custom'){ var w=Number($('hojaW').value),h=Number($('hojaH').value); if(!(w>10)||!(h>5)) return null; return {n:'Personalizado',w:w,h:h}; }
-  var i=Number(v)||0; return rackSizes()[i]||rackSizes()[0];
-}
+function plantillaHojaSel(){ var sel=$('hojaPlantilla'); if(!sel) return null; var i=Number(sel.value)||0; var a=plantillas_(); return a[i]||a[0]; }
+function pintarHojaInfo(){ var p=plantillaHojaSel(); if($('hojaInfo')) $('hojaInfo').textContent=p?(p.cols+'×'+p.rows+' = '+(p.cols*p.rows)+' por hoja · etiqueta '+p.labelW+'×'+p.labelH+' mm'):''; }
+if($('hojaPlantilla')) $('hojaPlantilla').addEventListener('change',pintarHojaInfo);
 function pintarHoja(){
   var c=$('hojaCount'), l=$('hojaList'); if(!l) return;
   if(c) c.textContent=bandeja.length?('· '+bandeja.length+' etiqueta'+(bandeja.length>1?'s':'')):'';
@@ -1786,26 +1822,126 @@ if($('btnRackAddHoja')) $('btnRackAddHoja').onclick=function(){
   toast('Agregadas '+n+' a la hoja ('+bandeja.length+' en total)');
 };
 if($('btnVaciarHoja')) $('btnVaciarHoja').onclick=function(){ bandeja=[]; pintarHoja(); };
+// Construye una celda de etiqueta (QR + texto) posicionada en mm dentro de la hoja.
+function celdaEtiqueta_(d,p,left,top){
+  var cell=document.createElement('div'); cell.className='pcell';
+  cell.style.left=left+'mm'; cell.style.top=top+'mm'; cell.style.width=p.labelW+'mm'; cell.style.height=p.labelH+'mm';
+  var chico=p.labelH<38;
+  var q=Math.max(8, Math.min(p.labelH-3, p.labelW*0.42, 34));
+  var tmp=document.createElement('div');
+  try{ new QRCode(tmp,{text:d.payload,width:240,height:240,correctLevel:QRCode.CorrectLevel.M}); }catch(err){}
+  var cv=tmp.querySelector('canvas');
+  var img=cv?('<img src="'+cv.toDataURL('image/png')+'" style="width:'+q+'mm;height:'+q+'mm">'):'';
+  cell.innerHTML='<div class="rq" style="padding-left:1.5mm">'+img+'</div><div class="rt" style="padding:0 1.5mm">'
+    +'<div class="ru" style="font-size:'+(chico?'7pt':'10pt')+'">'+d.ubicacion+'</div>'
+    +'<div class="rc" style="font-size:'+(chico?'6pt':'7.5pt')+'">'+(d.codigo?d.codigo+' · ':'')+d.nombre+'</div></div>';
+  return cell;
+}
 if($('btnImprimirHoja')) $('btnImprimirHoja').onclick=function(){
   if(!bandeja.length){ toast('La hoja está vacía',true); return; }
-  var e=hojaSizeSel(); if(!e){ toast('Indica ancho y alto del tamaño personalizado',true); return; }
+  var p=plantillaHojaSel(); if(!p){ toast('Elige una plantilla (configúralas en Config)',true); return; }
+  var perPage=Math.max(1,p.cols*p.rows);
+  var inicio=Math.max(1,Number($('hojaInicio').value)||1);
   var cont=$('printSheet'); cont.innerHTML='';
-  var chico=e.h<40, q=Math.min(e.h-6,32);
+  var pageDiv=null, idxOnPage=(inicio-1)%perPage;
+  function nuevaPagina(){ pageDiv=document.createElement('div'); pageDiv.className='psheet'; pageDiv.style.width=p.pageW+'mm'; pageDiv.style.height=p.pageH+'mm'; cont.appendChild(pageDiv); }
+  nuevaPagina();
   bandeja.forEach(function(d){
-    var tmp=document.createElement('div');
-    try{ new QRCode(tmp,{text:d.payload,width:220,height:220,correctLevel:QRCode.CorrectLevel.M}); }catch(err){}
-    var cv=tmp.querySelector('canvas');
-    var cell=document.createElement('div'); cell.className='rcell';
-    cell.style.width=e.w+'mm'; cell.style.height=e.h+'mm';
-    var img=cv?('<img src="'+cv.toDataURL('image/png')+'" style="width:'+q+'mm;height:'+q+'mm">'):'';
-    cell.innerHTML='<div class="rq">'+img+'</div><div class="rt">'
-      +'<div class="ru" style="font-size:'+(chico?'8pt':'11pt')+'">'+d.ubicacion+'</div>'
-      +'<div class="rc" style="font-size:'+(chico?'6pt':'8pt')+'">'+(d.codigo?d.codigo+' · ':'')+d.nombre+'</div></div>';
-    cont.appendChild(cell);
+    if(idxOnPage>=perPage){ nuevaPagina(); idxOnPage=0; }
+    var col=idxOnPage%p.cols, row=Math.floor(idxOnPage/p.cols);
+    var left=(p.mLeft||0)+col*(p.labelW+(p.gapX||0));
+    var top=(p.mTop||0)+row*(p.labelH+(p.gapY||0));
+    pageDiv.appendChild(celdaEtiqueta_(d,p,left,top));
+    idxOnPage++;
   });
-  $('pageStyle').textContent='@page{margin:6mm}';
+  $('pageStyle').textContent='@page{size:'+p.pageW+'mm '+p.pageH+'mm;margin:0}';
   document.body.classList.add('print-sheet');
-  setTimeout(function(){ window.print(); document.body.classList.remove('print-sheet'); },150);
+  setTimeout(function(){ window.print(); document.body.classList.remove('print-sheet'); },160);
+};
+
+// ============================================================
+//  Plantillas de hoja de etiquetas (Config) + prueba de alineación
+// ============================================================
+var PL_DEF=[{n:'A4 · 2×5 (99×54 mm)',pageW:210,pageH:297,cols:2,rows:5,labelW:99,labelH:54,mTop:13.5,mLeft:5,gapX:3,gapY:0}];
+function plantillas_(){ var a=BOOT&&BOOT.config&&BOOT.config.plantillas; return (a&&a.length)?a:PL_DEF; }
+var plEdit=-1;
+function pintarPlList(){
+  var box=$('plList'); if(!box) return;
+  box.innerHTML=plantillas_().map(function(p,i){
+    return '<div class="item"><div><b>'+p.n+'</b><small>'+p.cols+'×'+p.rows+' = '+(p.cols*p.rows)+'/hoja · etiqueta '+p.labelW+'×'+p.labelH+' mm · hoja '+p.pageW+'×'+p.pageH+'</small></div>'
+      +'<div style="display:flex;gap:6px;flex:0 0 auto">'
+      +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="editarPl('+i+')">✏️</button>'
+      +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="quitarPl('+i+')">✕</button>'
+      +'</div></div>';
+  }).join('')||'<div class="item" style="color:var(--mut)">Sin plantillas</div>';
+}
+function plNum_(id){ var v=Number($(id).value); return isNaN(v)?0:v; }
+function leerPl(){
+  return { n:($('plN').value.trim()||'Plantilla'), pageW:plNum_('plPW'), pageH:plNum_('plPH'),
+    cols:Math.round(plNum_('plCols')), rows:Math.round(plNum_('plRows')),
+    labelW:plNum_('plLW'), labelH:plNum_('plLH'), mTop:plNum_('plMT'), mLeft:plNum_('plML'), gapX:plNum_('plGX'), gapY:plNum_('plGY') };
+}
+function validarPl(p){
+  if(!(p.pageW>0&&p.pageH>0)) return 'Indica el tamaño de la hoja';
+  if(!(p.cols>0&&p.rows>0)) return 'Indica columnas y filas';
+  if(!(p.labelW>0&&p.labelH>0)) return 'Indica el tamaño de la etiqueta';
+  var needW=p.mLeft+p.cols*p.labelW+(p.cols-1)*p.gapX;
+  var needH=p.mTop+p.rows*p.labelH+(p.rows-1)*p.gapY;
+  if(needW>p.pageW+0.5) return 'No caben las columnas: necesitas '+needW.toFixed(1)+' mm y la hoja tiene '+p.pageW;
+  if(needH>p.pageH+0.5) return 'No caben las filas: necesitas '+needH.toFixed(1)+' mm y la hoja tiene '+p.pageH;
+  return null;
+}
+function cargarPl(p){
+  $('plN').value=p.n; $('plPW').value=p.pageW; $('plPH').value=p.pageH; $('plCols').value=p.cols; $('plRows').value=p.rows;
+  $('plLW').value=p.labelW; $('plLH').value=p.labelH; $('plMT').value=p.mTop; $('plML').value=p.mLeft; $('plGX').value=p.gapX; $('plGY').value=p.gapY;
+  pintarPlPreview();
+}
+function editarPl(i){ var p=plantillas_()[i]; if(!p) return; plEdit=i; cargarPl(p); if($('btnPlGuardar')) $('btnPlGuardar').textContent='💾 Actualizar plantilla'; try{$('plN').scrollIntoView({behavior:'smooth',block:'center'});}catch(e){} }
+function quitarPl(i){ var arr=plantillas_().slice(); arr.splice(i,1); guardarPlantillas(arr); plEdit=-1; if($('btnPlGuardar')) $('btnPlGuardar').textContent='💾 Guardar plantilla'; }
+function guardarPlantillas(arr){
+  gs('saveConfig',{plantillas:JSON.stringify(arr)}).then(function(){ BOOT.config.plantillas=arr; pintarPlList(); llenarPlantillasHoja(); toast('Plantillas actualizadas'); })
+    .catch(function(e){ toast(String(e.message||e),true); });
+}
+function pintarPlPreview(){
+  var box=$('plPreview'); if(!box) return;
+  var p=leerPl();
+  if(!(p.pageW>0&&p.pageH>0)){ box.innerHTML='<span style="color:var(--mut);font-size:12px">Indica el tamaño de la hoja…</span>'; return; }
+  var W=250, sc=W/p.pageW, H=Math.round(p.pageH*sc);
+  var rects='', per=(p.cols>0&&p.rows>0)?p.cols*p.rows:0;
+  for(var i=0;i<per;i++){
+    var col=i%p.cols, row=Math.floor(i/p.cols);
+    var x=(p.mLeft+col*(p.labelW+p.gapX))*sc, y=(p.mTop+row*(p.labelH+p.gapY))*sc, w=p.labelW*sc, h=p.labelH*sc;
+    rects+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="#16294f" stroke="#4f8cff" stroke-width="0.7"/>';
+  }
+  var err=validarPl(p);
+  box.innerHTML='<svg width="'+W+'" height="'+H+'" style="background:#fff;border-radius:6px"><rect width="'+W+'" height="'+H+'" fill="#fff"/>'+rects+'</svg>'
+    +'<div style="text-align:center;font-size:11px;margin-top:4px;color:'+(err?'var(--err)':'var(--mut)')+'">'+(err?('⚠ '+err):(per+' etiquetas por hoja'))+'</div>';
+}
+['plN','plPW','plPH','plCols','plRows','plLW','plLH','plMT','plML','plGX','plGY'].forEach(function(id){ if($(id)) $(id).addEventListener('input',pintarPlPreview); });
+if($('plA4')) $('plA4').onclick=function(){ $('plPW').value=210; $('plPH').value=297; pintarPlPreview(); };
+if($('plCarta')) $('plCarta').onclick=function(){ $('plPW').value=216; $('plPH').value=279; pintarPlPreview(); };
+if($('btnPlGuardar')) $('btnPlGuardar').onclick=function(){
+  var p=leerPl(); var err=validarPl(p); if(err){ toast(err,true); return; }
+  var arr=plantillas_().slice(); if(plEdit>=0) arr[plEdit]=p; else arr.push(p);
+  guardarPlantillas(arr); plEdit=-1; $('btnPlGuardar').textContent='💾 Guardar plantilla';
+};
+if($('btnPlNueva')) $('btnPlNueva').onclick=function(){ plEdit=-1; if($('btnPlGuardar')) $('btnPlGuardar').textContent='💾 Guardar plantilla'; ['plN','plCols','plRows','plLW','plLH','plMT','plML','plGX','plGY'].forEach(function(id){$(id).value='';}); pintarPlPreview(); };
+if($('btnPlPrueba')) $('btnPlPrueba').onclick=function(){
+  var p=leerPl(); var err=validarPl(p); if(err){ toast(err,true); return; }
+  var cont=$('printSheet'); cont.innerHTML='';
+  var pageDiv=document.createElement('div'); pageDiv.className='psheet'; pageDiv.style.width=p.pageW+'mm'; pageDiv.style.height=p.pageH+'mm'; cont.appendChild(pageDiv);
+  var per=p.cols*p.rows;
+  for(var i=0;i<per;i++){
+    var col=i%p.cols, row=Math.floor(i/p.cols);
+    var left=p.mLeft+col*(p.labelW+p.gapX), top=p.mTop+row*(p.labelH+p.gapY);
+    var cell=document.createElement('div'); cell.className='pcell test';
+    cell.style.left=left+'mm'; cell.style.top=top+'mm'; cell.style.width=p.labelW+'mm'; cell.style.height=p.labelH+'mm';
+    cell.innerHTML='<div style="margin:auto;text-align:center;color:#888;font-size:8pt;line-height:1.2">#'+(i+1)+'<br>'+p.labelW+'×'+p.labelH+'</div>';
+    pageDiv.appendChild(cell);
+  }
+  $('pageStyle').textContent='@page{size:'+p.pageW+'mm '+p.pageH+'mm;margin:0}';
+  document.body.classList.add('print-sheet');
+  setTimeout(function(){ window.print(); document.body.classList.remove('print-sheet'); },160);
 };
 </script>
 </body>
