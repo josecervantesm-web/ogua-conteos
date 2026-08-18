@@ -311,6 +311,11 @@
         <div><label>Separación horiz. mm</label><input id="plGX" type="number" inputmode="decimal"></div>
         <div><label>Separación vert. mm</label><input id="plGY" type="number" inputmode="decimal"></div>
       </div>
+      <div class="row">
+        <div><label>Tamaño QR mm <span style="color:var(--mut)">(auto)</span></label><input id="plQR" type="number" inputmode="decimal" placeholder="auto"></div>
+        <div><label>Letra ubicación pt</label><input id="plFU" type="number" inputmode="decimal" placeholder="auto"></div>
+        <div><label>Letra info pt</label><input id="plFI" type="number" inputmode="decimal" placeholder="auto"></div>
+      </div>
       <label>Vista previa</label>
       <div id="plPreview" style="background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;align-items:center"></div>
       <div class="row" style="margin-top:8px">
@@ -1827,14 +1832,16 @@ function celdaEtiqueta_(d,p,left,top){
   var cell=document.createElement('div'); cell.className='pcell';
   cell.style.left=left+'mm'; cell.style.top=top+'mm'; cell.style.width=p.labelW+'mm'; cell.style.height=p.labelH+'mm';
   var chico=p.labelH<38;
-  var q=Math.max(8, Math.min(p.labelH-3, p.labelW*0.42, 34));
+  var q=(p.qr>0)?p.qr:Math.max(8, Math.min(p.labelH-3, p.labelW*0.42, 34));
+  var fU=(p.fUbi>0)?p.fUbi:(chico?7:10);
+  var fI=(p.fInfo>0)?p.fInfo:(chico?6:7.5);
   var tmp=document.createElement('div');
   try{ new QRCode(tmp,{text:d.payload,width:240,height:240,correctLevel:QRCode.CorrectLevel.M}); }catch(err){}
   var cv=tmp.querySelector('canvas');
   var img=cv?('<img src="'+cv.toDataURL('image/png')+'" style="width:'+q+'mm;height:'+q+'mm">'):'';
   cell.innerHTML='<div class="rq" style="padding-left:1.5mm">'+img+'</div><div class="rt" style="padding:0 1.5mm">'
-    +'<div class="ru" style="font-size:'+(chico?'7pt':'10pt')+'">'+d.ubicacion+'</div>'
-    +'<div class="rc" style="font-size:'+(chico?'6pt':'7.5pt')+'">'+(d.codigo?d.codigo+' · ':'')+d.nombre+'</div></div>';
+    +'<div class="ru" style="font-size:'+fU+'pt">'+d.ubicacion+'</div>'
+    +'<div class="rc" style="font-size:'+fI+'pt">'+(d.codigo?d.codigo+' · ':'')+d.nombre+'</div></div>';
   return cell;
 }
 if($('btnImprimirHoja')) $('btnImprimirHoja').onclick=function(){
@@ -1879,7 +1886,8 @@ function plNum_(id){ var v=Number($(id).value); return isNaN(v)?0:v; }
 function leerPl(){
   return { n:($('plN').value.trim()||'Plantilla'), pageW:plNum_('plPW'), pageH:plNum_('plPH'),
     cols:Math.round(plNum_('plCols')), rows:Math.round(plNum_('plRows')),
-    labelW:plNum_('plLW'), labelH:plNum_('plLH'), mTop:plNum_('plMT'), mLeft:plNum_('plML'), gapX:plNum_('plGX'), gapY:plNum_('plGY') };
+    labelW:plNum_('plLW'), labelH:plNum_('plLH'), mTop:plNum_('plMT'), mLeft:plNum_('plML'), gapX:plNum_('plGX'), gapY:plNum_('plGY'),
+    qr:plNum_('plQR'), fUbi:plNum_('plFU'), fInfo:plNum_('plFI') };
 }
 function validarPl(p){
   if(!(p.pageW>0&&p.pageH>0)) return 'Indica el tamaño de la hoja';
@@ -1889,11 +1897,13 @@ function validarPl(p){
   var needH=p.mTop+p.rows*p.labelH+(p.rows-1)*p.gapY;
   if(needW>p.pageW+0.5) return 'No caben las columnas: necesitas '+needW.toFixed(1)+' mm y la hoja tiene '+p.pageW;
   if(needH>p.pageH+0.5) return 'No caben las filas: necesitas '+needH.toFixed(1)+' mm y la hoja tiene '+p.pageH;
+  if(p.qr>0 && (p.qr>p.labelW||p.qr>p.labelH)) return 'El QR ('+p.qr+' mm) no cabe en la etiqueta ('+p.labelW+'×'+p.labelH+' mm)';
   return null;
 }
 function cargarPl(p){
   $('plN').value=p.n; $('plPW').value=p.pageW; $('plPH').value=p.pageH; $('plCols').value=p.cols; $('plRows').value=p.rows;
   $('plLW').value=p.labelW; $('plLH').value=p.labelH; $('plMT').value=p.mTop; $('plML').value=p.mLeft; $('plGX').value=p.gapX; $('plGY').value=p.gapY;
+  $('plQR').value=p.qr||''; $('plFU').value=p.fUbi||''; $('plFI').value=p.fInfo||'';
   pintarPlPreview();
 }
 function editarPl(i){ var p=plantillas_()[i]; if(!p) return; plEdit=i; cargarPl(p); if($('btnPlGuardar')) $('btnPlGuardar').textContent='💾 Actualizar plantilla'; try{$('plN').scrollIntoView({behavior:'smooth',block:'center'});}catch(e){} }
@@ -1907,17 +1917,24 @@ function pintarPlPreview(){
   var p=leerPl();
   if(!(p.pageW>0&&p.pageH>0)){ box.innerHTML='<span style="color:var(--mut);font-size:12px">Indica el tamaño de la hoja…</span>'; return; }
   var W=250, sc=W/p.pageW, H=Math.round(p.pageH*sc);
+  var qauto=Math.max(8, Math.min(p.labelH-3, p.labelW*0.42, 34));
+  var qmm=(p.qr>0)?p.qr:qauto;
   var rects='', per=(p.cols>0&&p.rows>0)?p.cols*p.rows:0;
   for(var i=0;i<per;i++){
     var col=i%p.cols, row=Math.floor(i/p.cols);
     var x=(p.mLeft+col*(p.labelW+p.gapX))*sc, y=(p.mTop+row*(p.labelH+p.gapY))*sc, w=p.labelW*sc, h=p.labelH*sc;
     rects+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="#16294f" stroke="#4f8cff" stroke-width="0.7"/>';
+    var qs=Math.min(qmm*sc, w-2, h-2), qx=x+1.5, qy=y+(h-qs)/2;
+    if(qs>1){ rects+='<rect x="'+qx.toFixed(1)+'" y="'+qy.toFixed(1)+'" width="'+qs.toFixed(1)+'" height="'+qs.toFixed(1)+'" fill="#cfe0ff" stroke="#4f8cff" stroke-width="0.4"/>'; }
+    var tx=qx+qs+2, tw=x+w-tx-1.5;
+    if(tw>3){ rects+='<rect x="'+tx.toFixed(1)+'" y="'+(y+h*0.40).toFixed(1)+'" width="'+tw.toFixed(1)+'" height="2" fill="#9cc2ff"/>'
+      +'<rect x="'+tx.toFixed(1)+'" y="'+(y+h*0.58).toFixed(1)+'" width="'+(tw*0.8).toFixed(1)+'" height="1.5" fill="#6f8fc0"/>'; }
   }
   var err=validarPl(p);
   box.innerHTML='<svg width="'+W+'" height="'+H+'" style="background:#fff;border-radius:6px"><rect width="'+W+'" height="'+H+'" fill="#fff"/>'+rects+'</svg>'
     +'<div style="text-align:center;font-size:11px;margin-top:4px;color:'+(err?'var(--err)':'var(--mut)')+'">'+(err?('⚠ '+err):(per+' etiquetas por hoja'))+'</div>';
 }
-['plN','plPW','plPH','plCols','plRows','plLW','plLH','plMT','plML','plGX','plGY'].forEach(function(id){ if($(id)) $(id).addEventListener('input',pintarPlPreview); });
+['plN','plPW','plPH','plCols','plRows','plLW','plLH','plMT','plML','plGX','plGY','plQR','plFU','plFI'].forEach(function(id){ if($(id)) $(id).addEventListener('input',pintarPlPreview); });
 if($('plA4')) $('plA4').onclick=function(){ $('plPW').value=210; $('plPH').value=297; pintarPlPreview(); };
 if($('plCarta')) $('plCarta').onclick=function(){ $('plPW').value=216; $('plPH').value=279; pintarPlPreview(); };
 if($('btnPlGuardar')) $('btnPlGuardar').onclick=function(){
@@ -1925,7 +1942,7 @@ if($('btnPlGuardar')) $('btnPlGuardar').onclick=function(){
   var arr=plantillas_().slice(); if(plEdit>=0) arr[plEdit]=p; else arr.push(p);
   guardarPlantillas(arr); plEdit=-1; $('btnPlGuardar').textContent='💾 Guardar plantilla';
 };
-if($('btnPlNueva')) $('btnPlNueva').onclick=function(){ plEdit=-1; if($('btnPlGuardar')) $('btnPlGuardar').textContent='💾 Guardar plantilla'; ['plN','plCols','plRows','plLW','plLH','plMT','plML','plGX','plGY'].forEach(function(id){$(id).value='';}); pintarPlPreview(); };
+if($('btnPlNueva')) $('btnPlNueva').onclick=function(){ plEdit=-1; if($('btnPlGuardar')) $('btnPlGuardar').textContent='💾 Guardar plantilla'; ['plN','plCols','plRows','plLW','plLH','plMT','plML','plGX','plGY','plQR','plFU','plFI'].forEach(function(id){$(id).value='';}); pintarPlPreview(); };
 if($('btnPlPrueba')) $('btnPlPrueba').onclick=function(){
   var p=leerPl(); var err=validarPl(p); if(err){ toast(err,true); return; }
   var cont=$('printSheet'); cont.innerHTML='';
