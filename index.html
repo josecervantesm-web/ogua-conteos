@@ -507,6 +507,11 @@
     <div class="card">
       <h2>Racks etiquetados</h2>
       <input id="rackFiltro" placeholder="Filtrar por ubicación, código o artículo…" autocomplete="off">
+      <div class="seg" id="rackVerSeg" style="margin-top:8px">
+        <button data-v="todas" class="on">Todas</button>
+        <button data-v="sin">Sin imprimir</button>
+        <button data-v="impresas">Impresas</button>
+      </div>
       <div class="list" id="rackHist" style="margin-top:8px"></div>
     </div>
   </section>
@@ -1664,7 +1669,7 @@ $('btnRackGen').onclick=function(){
   if(!rackSel){ toast('Selecciona el artículo',true); return; }
   var b=$('btnRackGen'); b.disabled=true; b.textContent='Generando…';
   gs('guardarRack',{bodega:bodega,ubicacion:ubi,codigo:rackSel.c,nombre:rackSel.n,usuario:usuario}).then(function(r){
-    rackData={bodega:bodega,ubicacion:ubi,codigo:rackSel.c||'',nombre:rackSel.n,payload:r.payload};
+    rackData={id:r.id,bodega:bodega,ubicacion:ubi,codigo:rackSel.c||'',nombre:rackSel.n,payload:r.payload};
     registrarUbicacionLocal(bodega,ubi);
     mostrarRackEtiqueta(rackData);
     cargarRacks();
@@ -1717,6 +1722,7 @@ if($('btnRackImprimir')) $('btnRackImprimir').onclick=function(){
   if(cv){ img.src=cv.toDataURL('image/png'); img.style.display='block'; img.style.width=q+'mm'; img.style.height=q+'mm'; }
   else img.style.display='none';
   $('plBar').innerHTML=''; $('plBar').style.display='none';
+  if(rackData.id) marcarImpresoUI([rackData.id]);
   document.body.classList.add('print-et');
   setTimeout(function(){ window.print(); document.body.classList.remove('print-et'); },80);
 };
@@ -1728,6 +1734,7 @@ if($('btnRackZpl')) $('btnRackZpl').onclick=function(){
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='rack_'+String(rackData.ubicacion).replace(/[^\w-]/g,'_').slice(0,30)+'.zpl';
   document.body.appendChild(a); a.click(); a.remove();
+  if(rackData.id) marcarImpresoUI([rackData.id]);
   toast('ZPL descargado (203 dpi): envíalo a la Zebra');
 };
 function generarZplRack_(d,e){
@@ -1745,23 +1752,39 @@ function generarZplRack_(d,e){
 }
 
 // ---- historial de racks ----
+var rackVer='todas'; // todas | sin | impresas
 function cargarRacks(){
   $('rackHist').innerHTML='<div class="item">Cargando…</div>';
-  gs('getRacks',$('rackFiltro').value.trim()).then(function(list){
-    RACKS=list;
-    if(!list.length){ $('rackHist').innerHTML='<div class="item" style="color:var(--mut)">Aún no hay racks etiquetados</div>'; return; }
-    $('rackHist').innerHTML=list.map(function(r,i){
-      return '<div class="item"><div><b>'+r.ubicacion+'</b><small>'+(r.codigo?r.codigo+' · ':'')+r.nombre+(r.bodega?(' · '+r.bodega):'')+' · '+r.fecha+'</small></div>'
-        +'<div style="display:flex;gap:6px;flex:0 0 auto">'
-        +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="reimprimirRack('+i+')">🏷</button>'
-        +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="agregarHojaHist('+i+')">➕ Hoja</button>'
-        +'</div></div>';
-    }).join('');
-  }).catch(function(e){ $('rackHist').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
+  gs('getRacks',$('rackFiltro').value.trim()).then(function(list){ RACKS=list; pintarRacks(); })
+    .catch(function(e){ $('rackHist').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
+}
+function pintarRacks(){
+  if(!RACKS.length){ $('rackHist').innerHTML='<div class="item" style="color:var(--mut)">Aún no hay racks etiquetados</div>'; return; }
+  var rows=[];
+  RACKS.forEach(function(r,i){
+    var imp=(r.impresiones||0)>0;
+    if(rackVer==='sin' && imp) return;
+    if(rackVer==='impresas' && !imp) return;
+    var badge= imp
+      ? '<span style="background:#153f27;color:#5fe39a;border-radius:99px;padding:2px 8px;font-size:10.5px;font-weight:700">🖨 '+r.impresiones+(r.ultimaImpresion?(' · '+r.ultimaImpresion):'')+'</span>'
+      : '<span style="background:var(--card2);color:var(--mut);border-radius:99px;padding:2px 8px;font-size:10.5px;font-weight:700">sin imprimir</span>';
+    rows.push('<div class="item"><div><b>'+r.ubicacion+'</b><small>'+(r.codigo?r.codigo+' · ':'')+r.nombre+(r.bodega?(' · '+r.bodega):'')+' · '+r.fecha+' · '+badge+'</small></div>'
+      +'<div style="display:flex;gap:6px;flex:0 0 auto">'
+      +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="reimprimirRack('+i+')">🏷</button>'
+      +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="agregarHojaHist('+i+')">➕ Hoja</button>'
+      +'</div></div>');
+  });
+  $('rackHist').innerHTML=rows.join('')||'<div class="item" style="color:var(--mut)">No hay racks '+(rackVer==='sin'?'sin imprimir':'impresos')+'.</div>';
+}
+Array.prototype.forEach.call(document.querySelectorAll('#rackVerSeg button'),function(b){ b.onclick=function(){ rackVer=b.dataset.v; Array.prototype.forEach.call(document.querySelectorAll('#rackVerSeg button'),function(x){x.classList.toggle('on',x===b);}); pintarRacks(); }; });
+function marcarImpresoUI(ids){
+  ids=(ids||[]).filter(Boolean); if(!ids.length) return;
+  var u={},uniq=[]; ids.forEach(function(x){ if(!u[x]){u[x]=1;uniq.push(x);} });
+  gs('marcarImpreso',uniq).then(function(){ if($('v-rack') && !$('v-rack').classList.contains('hide')) cargarRacks(); }).catch(function(){});
 }
 function reimprimirRack(i){
   var r=RACKS[i]; if(!r) return;
-  rackData={bodega:r.bodega,ubicacion:r.ubicacion,codigo:r.codigo,nombre:r.nombre,payload:r.payload};
+  rackData={id:r.id,bodega:r.bodega,ubicacion:r.ubicacion,codigo:r.codigo,nombre:r.nombre,payload:r.payload};
   mostrarRackEtiqueta(rackData);
 }
 var _rackFiltroT=null;
@@ -1820,7 +1843,7 @@ function pintarHoja(){
   }).join('');
 }
 function agregarHoja(d,copias){ copias=Math.max(1,Number(copias)||1); for(var i=0;i<copias;i++) bandeja.push(d); pintarHoja(); return copias; }
-function agregarHojaHist(i){ var r=RACKS[i]; if(!r) return; agregarHoja({bodega:r.bodega,ubicacion:r.ubicacion,codigo:r.codigo,nombre:r.nombre,payload:r.payload},1); toast('Agregada a la hoja ('+bandeja.length+')'); }
+function agregarHojaHist(i){ var r=RACKS[i]; if(!r) return; agregarHoja({id:r.id,bodega:r.bodega,ubicacion:r.ubicacion,codigo:r.codigo,nombre:r.nombre,payload:r.payload},1); toast('Agregada a la hoja ('+bandeja.length+')'); }
 if($('btnRackAddHoja')) $('btnRackAddHoja').onclick=function(){
   if(!rackData){ toast('Primero genera una etiqueta',true); return; }
   var n=agregarHoja(rackData,$('rackCopias').value);
@@ -1861,6 +1884,7 @@ if($('btnImprimirHoja')) $('btnImprimirHoja').onclick=function(){
     pageDiv.appendChild(celdaEtiqueta_(d,p,left,top));
     idxOnPage++;
   });
+  marcarImpresoUI(bandeja.map(function(d){ return d.id; }));
   $('pageStyle').textContent='@page{size:'+p.pageW+'mm '+p.pageH+'mm;margin:0}';
   document.body.classList.add('print-sheet');
   setTimeout(function(){ window.print(); document.body.classList.remove('print-sheet'); },160);
