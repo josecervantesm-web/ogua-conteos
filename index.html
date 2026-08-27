@@ -539,6 +539,8 @@
         <input id="ubicBuscar" placeholder="Buscar artículo por nombre o código…" autocomplete="off">
         <div class="opts hide" id="ubicOpts"></div>
       </div>
+      <label>Filtrar por bodega</label>
+      <select id="ubicBodega"><option value="">Todas las bodegas</option></select>
       <div id="ubicSel" class="hide" style="margin-top:8px"><b id="ubicSelNombre"></b><br><small id="ubicSelCodigo" style="color:var(--mut)"></small></div>
       <div class="list" id="ubicRes" style="margin-top:10px"></div>
     </div>
@@ -642,12 +644,13 @@ function iniciar(){
     BOOT=b; MAESTRO=b.maestro.items||[];
     $('subt').textContent = MAESTRO.length+' artículos en maestro · conectado';
     var bods=b.bodegas||[];
-    var zonaSel=$('zona'), pz=$('pendZona'), ub=$('ubiBodega'), cz=$('compZona'), ib=$('impBodega'), rb=$('rackBodega');
+    var zonaSel=$('zona'), pz=$('pendZona'), ub=$('ubiBodega'), cz=$('compZona'), ib=$('impBodega'), rb=$('rackBodega'), uu=$('ubicBodega');
     zonaSel.innerHTML='<option value="">Elige bodega…</option>';
     pz.innerHTML='<option value="">Todas las bodegas</option>';
     if(cz) cz.innerHTML='<option value="">Todas las bodegas</option>';
     if(ib) ib.innerHTML='<option value="">Elige bodega…</option>';
     if(rb) rb.innerHTML='<option value="">Elige bodega…</option>';
+    if(uu) uu.innerHTML='<option value="">Todas las bodegas</option>';
     ub.innerHTML='';
     bods.forEach(function(z){
       zonaSel.appendChild(new Option(z,z));
@@ -655,6 +658,7 @@ function iniciar(){
       if(cz) cz.appendChild(new Option(z,z));
       if(ib) ib.appendChild(new Option(z,z));
       if(rb) rb.appendChild(new Option(z,z));
+      if(uu) uu.appendChild(new Option(z,z));
       ub.appendChild(new Option(z,z));
     });
     var zg=localStorage.getItem('ogua_zona')||'';
@@ -1851,22 +1855,28 @@ setModActual(document.querySelector('.tabscroll button.on')||document.querySelec
 
 // ---- Ubicaciones de un artículo ----
 autocompletar('ubicBuscar','ubicOpts',function(it){ buscarUbicacionesUI(it); });
+var UBIC=[];
+function pintarUbic(){
+  var f=$('ubicBodega')?$('ubicBodega').value:'';
+  var list=UBIC.filter(function(u){ return !f || u.bodega===f; });
+  if(!list.length){ $('ubicRes').innerHTML='<div class="item" style="color:var(--mut)">'+(UBIC.length?('Sin ubicaciones en '+f+' para este artículo.'):'No hay ubicaciones registradas para este artículo (ni en racks, ni en conteos, ni en MACs).')+'</div>'; return; }
+  $('ubicRes').innerHTML=list.map(function(u){
+    var b='';
+    if(u.rack) b+='<span class="pill p-ok" style="margin-left:4px">🏷 Rack</span>';
+    if(u.conteo>0) b+='<span class="pill p-warn" style="margin-left:4px">📦 '+u.conteo+'</span>';
+    if(u.macs>0) b+='<span class="pill p-mut" style="margin-left:4px">🔌 '+u.macs+'</span>';
+    return '<div class="item"><div><b>'+(u.ubicacion||'(sin ubicación)')+'</b><small>'+(u.bodega||'')+'</small></div><div style="text-align:right">'+b+'</div></div>';
+  }).join('');
+}
 function buscarUbicacionesUI(it){
   $('ubicSel').classList.remove('hide');
   $('ubicSelNombre').textContent=it.n;
   $('ubicSelCodigo').textContent=(it.c?('Código: '+it.c):'(sin código)');
   $('ubicRes').innerHTML='<div class="item">Buscando…</div>';
-  gs('ubicacionesDeArticulo',{codigo:it.c,nombre:it.n}).then(function(r){
-    if(!r.ubicaciones.length){ $('ubicRes').innerHTML='<div class="item" style="color:var(--mut)">No hay ubicaciones registradas para este artículo (ni en racks, ni en conteos, ni en MACs).</div>'; return; }
-    $('ubicRes').innerHTML=r.ubicaciones.map(function(u){
-      var b='';
-      if(u.rack) b+='<span class="pill p-ok" style="margin-left:4px">🏷 Rack</span>';
-      if(u.conteo>0) b+='<span class="pill p-warn" style="margin-left:4px">📦 '+u.conteo+'</span>';
-      if(u.macs>0) b+='<span class="pill p-mut" style="margin-left:4px">🔌 '+u.macs+'</span>';
-      return '<div class="item"><div><b>'+(u.ubicacion||'(sin ubicación)')+'</b><small>'+(u.bodega||'')+'</small></div><div style="text-align:right">'+b+'</div></div>';
-    }).join('');
-  }).catch(function(e){ $('ubicRes').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
+  gs('ubicacionesDeArticulo',{codigo:it.c,nombre:it.n}).then(function(r){ UBIC=r.ubicaciones||[]; pintarUbic(); })
+    .catch(function(e){ $('ubicRes').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
 }
+if($('ubicBodega')) $('ubicBodega').addEventListener('change',pintarUbic);
 function reimprimirRack(i){
   var r=RACKS[i]; if(!r) return;
   rackData={id:r.id,bodega:r.bodega,ubicacion:r.ubicacion,codigo:r.codigo,nombre:r.nombre,payload:r.payload};
