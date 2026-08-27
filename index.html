@@ -17,10 +17,18 @@
   body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);padding-bottom:76px}
   header{padding:14px 16px 8px}
   header h1{margin:0;font-size:19px} header p{margin:2px 0 0;color:var(--mut);font-size:12px}
-  .tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);z-index:50}
-  .tabs button{flex:1;background:none;border:0;color:var(--mut);padding:9px 2px 10px;font-size:10.5px;cursor:pointer}
-  .tabs button.on{color:var(--acc);font-weight:700}
-  .tabs .ico{display:block;font-size:19px;margin-bottom:2px}
+  .tabs{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;background:var(--card);border-top:1px solid var(--line);z-index:50}
+  .menu-btn{flex:0 0 auto;background:var(--card2);border:0;border-right:1px solid var(--line);color:var(--acc);padding:12px 16px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px}
+  .menu-btn .ico{font-size:18px}
+  .mod-actual{flex:1;padding:0 14px;color:var(--txt);font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mod-actual .e{margin-right:6px}
+  .tabscroll{display:none}
+  #modBackdrop{position:fixed;inset:0;z-index:55;background:rgba(0,0,0,.45)}
+  #modMenu{position:fixed;left:0;top:0;bottom:0;width:240px;max-width:82vw;background:var(--card);border-right:1px solid var(--line);z-index:60;overflow-y:auto;box-shadow:6px 0 34px rgba(0,0,0,.5)}
+  #modMenu .mh{padding:16px 16px 10px;font-size:12px;color:var(--mut);font-weight:800;letter-spacing:1px}
+  #modMenu .mi{display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:1px solid var(--line);cursor:pointer;color:var(--txt);font-size:15px}
+  #modMenu .mi.on{color:var(--acc);font-weight:700;background:var(--card2)}
+  #modMenu .mi .e{font-size:19px;width:22px;text-align:center}
   main{padding:0 14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
   h2{font-size:15px;margin:0 0 10px} h3{font-size:13px;margin:14px 0 6px;color:var(--mut)}
@@ -325,6 +333,12 @@
       <button class="btn sec" id="btnPlNueva">＋ Nueva (limpiar)</button>
     </div>
     <div class="card">
+      <h2>🔗 URL pública para el QR (racks)</h2>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Si pones aquí la URL pública de la app (la de GitHub Pages), los QR nuevos serán un enlace <b>&lt;URL&gt;?rack=ID</b> y <b>cualquier cámara</b> abrirá la info del rack. Si lo dejas vacío, el QR guarda solo el ID y se lee dentro de la app (pestaña Racks → Consultar).</p>
+      <input id="qrBase" placeholder="https://tuusuario.github.io/turepo/">
+      <button class="btn sec" id="btnQrBase">💾 Guardar URL del QR</button>
+    </div>
+    <div class="card">
       <h2>Bodegas y ubicaciones</h2>
       <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Las bodegas son fijas: <b id="zonasList"></b></p>
       <label>Nueva ubicación dentro de una bodega</label>
@@ -516,16 +530,37 @@
     </div>
   </section>
 
+  <!-- ================= UBICACIONES ================= -->
+  <section id="v-ubic" class="hide">
+    <div class="card">
+      <h2>🔎 Ubicaciones de un artículo</h2>
+      <p style="color:var(--mut);font-size:12px">Busca un artículo y mira en qué ubicaciones está, cruzando racks etiquetados, conteos y MACs escaneadas.</p>
+      <div class="sug">
+        <input id="ubicBuscar" placeholder="Buscar artículo por nombre o código…" autocomplete="off">
+        <div class="opts hide" id="ubicOpts"></div>
+      </div>
+      <div id="ubicSel" class="hide" style="margin-top:8px"><b id="ubicSelNombre"></b><br><small id="ubicSelCodigo" style="color:var(--mut)"></small></div>
+      <div class="list" id="ubicRes" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+<div id="modBackdrop" class="hide"></div>
+<div id="modMenu" class="hide"></div>
 <nav class="tabs">
-  <button data-v="conteo" class="on"><span class="ico">🔢</span>Conteo</button>
-  <button data-v="pend"><span class="ico">📋</span>Ítems</button>
-  <button data-v="comp"><span class="ico">⚖️</span>Compar.</button>
-  <button data-v="mov"><span class="ico">🔄</span>Movim.</button>
-  <button data-v="dash"><span class="ico">📊</span>Dash</button>
-  <button data-v="macs"><span class="ico">🔌</span>MACs</button>
-  <button data-v="import"><span class="ico">📥</span>Import.</button>
-  <button data-v="rack"><span class="ico">🏷</span>Racks</button>
-  <button data-v="conf"><span class="ico">⚙️</span>Config</button>
+  <button id="btnMenu" class="menu-btn" type="button"><span class="ico">☰</span>Menú</button>
+  <div id="modActual" class="mod-actual"></div>
+  <div class="tabscroll">
+    <button data-v="conteo" class="on"><span class="ico">🔢</span>Conteo</button>
+    <button data-v="pend"><span class="ico">📋</span>Ítems</button>
+    <button data-v="comp"><span class="ico">⚖️</span>Compar.</button>
+    <button data-v="mov"><span class="ico">🔄</span>Movim.</button>
+    <button data-v="dash"><span class="ico">📊</span>Dash</button>
+    <button data-v="macs"><span class="ico">🔌</span>MACs</button>
+    <button data-v="ubic"><span class="ico">🔎</span>Ubic.</button>
+    <button data-v="import"><span class="ico">📥</span>Import.</button>
+    <button data-v="rack"><span class="ico">🏷</span>Racks</button>
+    <button data-v="conf"><span class="ico">⚙️</span>Config</button>
+  </div>
 </nav>
 
 <script>
@@ -630,6 +665,8 @@ function iniciar(){
     $('conUrl').value=API.url; $('conTok').value=API.token;
     pintarEtList();
     if(typeof pintarPlList==='function'){ pintarPlList(); pintarPlPreview(); }
+    if($('qrBase')) $('qrBase').value=(b.config&&b.config.qrBaseUrl)||'';
+    (function(){ var mr=(location.search||'').match(/[?&]rack=([^&]+)/); if(mr){ var t=document.querySelector('.tabs button[data-v="rack"]'); if(t) t.click(); setTimeout(function(){ if(typeof consultarRackUI==='function') consultarRackUI(decodeURIComponent(mr[1])); },300); } })();
     restaurarSesion();
     if(b.errorMaestro) toast('Maestro: '+b.errorMaestro,true);
   }).catch(function(e){
@@ -682,13 +719,15 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 
 // ---- tabs ----
-document.querySelectorAll('.tabs button').forEach(function(btn){
+document.querySelectorAll('.tabscroll button').forEach(function(btn){
   btn.onclick=function(){
-    document.querySelectorAll('.tabs button').forEach(function(b){b.classList.remove('on');});
+    document.querySelectorAll('.tabscroll button').forEach(function(b){b.classList.remove('on');});
     btn.classList.add('on');
-    ['conteo','pend','comp','mov','dash','macs','import','rack','conf'].forEach(function(v){
+    setModActual(btn);
+    ['conteo','pend','comp','mov','dash','macs','ubic','import','rack','conf'].forEach(function(v){
       $('v-'+v).classList.toggle('hide', v!==btn.dataset.v);
     });
+    if(btn.dataset.v==='ubic') setTimeout(function(){ var e=$('ubicBuscar'); if(e) e.focus(); },50);
     if(btn.dataset.v==='pend'){ cargarPendientes(); cargarCerrados(); }
     if(btn.dataset.v==='comp') cargarComparativo();
     if(btn.dataset.v==='mov') cargarMovimientos();
@@ -1781,6 +1820,52 @@ function marcarImpresoUI(ids){
   ids=(ids||[]).filter(Boolean); if(!ids.length) return;
   var u={},uniq=[]; ids.forEach(function(x){ if(!u[x]){u[x]=1;uniq.push(x);} });
   gs('marcarImpreso',uniq).then(function(){ if($('v-rack') && !$('v-rack').classList.contains('hide')) cargarRacks(); }).catch(function(){});
+}
+if($('btnQrBase')) $('btnQrBase').onclick=function(){
+  var v=$('qrBase').value.trim();
+  gs('saveConfig',{qrBaseUrl:v}).then(function(){ if(BOOT&&BOOT.config) BOOT.config.qrBaseUrl=v; toast('URL del QR guardada'+(v?'':' (vacía: el QR llevará solo el ID)')); })
+    .catch(function(e){ toast(String(e.message||e),true); });
+};
+
+// ---- Menú lateral vertical de módulos ----
+function setModActual(btn){ var ma=$('modActual'); if(!ma||!btn) return; var ic=btn.querySelector('.ico'); var e=ic?ic.textContent:''; ma.innerHTML='<span class="e">'+e+'</span>'+btn.textContent.replace(e,'').trim(); }
+function toggleModMenu(show){
+  var m=$('modMenu'), bd=$('modBackdrop'); if(!m) return;
+  var abrir=(show===undefined)?m.classList.contains('hide'):show;
+  if(abrir){
+    m.innerHTML='<div class="mh">MÓDULOS</div>';
+    Array.prototype.forEach.call(document.querySelectorAll('.tabscroll button'),function(b){
+      var e=b.querySelector('.ico')?b.querySelector('.ico').textContent:'';
+      var txt=b.textContent.replace(e,'').trim();
+      var it=document.createElement('div'); it.className='mi'+(b.classList.contains('on')?' on':'');
+      it.innerHTML='<span class="e">'+e+'</span> <span>'+txt+'</span>';
+      it.onclick=function(){ b.click(); toggleModMenu(false); };
+      m.appendChild(it);
+    });
+    m.classList.remove('hide'); bd.classList.remove('hide');
+  } else { m.classList.add('hide'); bd.classList.add('hide'); }
+}
+if($('btnMenu')) $('btnMenu').onclick=function(){ toggleModMenu(); };
+if($('modBackdrop')) $('modBackdrop').onclick=function(){ toggleModMenu(false); };
+setModActual(document.querySelector('.tabscroll button.on')||document.querySelector('.tabscroll button'));
+
+// ---- Ubicaciones de un artículo ----
+autocompletar('ubicBuscar','ubicOpts',function(it){ buscarUbicacionesUI(it); });
+function buscarUbicacionesUI(it){
+  $('ubicSel').classList.remove('hide');
+  $('ubicSelNombre').textContent=it.n;
+  $('ubicSelCodigo').textContent=(it.c?('Código: '+it.c):'(sin código)');
+  $('ubicRes').innerHTML='<div class="item">Buscando…</div>';
+  gs('ubicacionesDeArticulo',{codigo:it.c,nombre:it.n}).then(function(r){
+    if(!r.ubicaciones.length){ $('ubicRes').innerHTML='<div class="item" style="color:var(--mut)">No hay ubicaciones registradas para este artículo (ni en racks, ni en conteos, ni en MACs).</div>'; return; }
+    $('ubicRes').innerHTML=r.ubicaciones.map(function(u){
+      var b='';
+      if(u.rack) b+='<span class="pill p-ok" style="margin-left:4px">🏷 Rack</span>';
+      if(u.conteo>0) b+='<span class="pill p-warn" style="margin-left:4px">📦 '+u.conteo+'</span>';
+      if(u.macs>0) b+='<span class="pill p-mut" style="margin-left:4px">🔌 '+u.macs+'</span>';
+      return '<div class="item"><div><b>'+(u.ubicacion||'(sin ubicación)')+'</b><small>'+(u.bodega||'')+'</small></div><div style="text-align:right">'+b+'</div></div>';
+    }).join('');
+  }).catch(function(e){ $('ubicRes').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
 }
 function reimprimirRack(i){
   var r=RACKS[i]; if(!r) return;
