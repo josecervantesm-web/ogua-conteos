@@ -66,6 +66,10 @@
   .seg{display:flex;background:var(--card2);border-radius:11px;padding:4px;gap:4px;margin-top:4px}
   .seg button{flex:1;border:0;border-radius:8px;background:none;color:var(--mut);padding:9px 4px;font-size:13px;font-weight:700;cursor:pointer}
   .seg button.on{background:var(--acc);color:#fff}
+  .qty{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:6px}
+  .qty button{width:56px;height:56px;border-radius:50%;border:0;background:var(--card2);border:1px solid var(--line);color:var(--txt);font-size:26px;font-weight:700;cursor:pointer}
+  .qty button:active{background:var(--acc);color:#fff}
+  .qty b{font-size:30px;min-width:64px;text-align:center}
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:150;padding:16px}
   .mcard{background:#fff;color:#111;border-radius:14px;padding:18px;max-width:360px;width:100%;text-align:center}
   .mcard h2{color:#111}
@@ -124,7 +128,7 @@
 <main>
 
   <!-- ================= CONTEO ================= -->
-  <section id="v-conteo">
+  <section id="v-conteo" class="hide">
     <div class="card">
       <h2>Sesión de conteo</h2>
       <div class="row">
@@ -530,6 +534,59 @@
     </div>
   </section>
 
+  <!-- ================= CANTIDAD EN UBICACIÓN ================= -->
+  <section id="v-cant">
+    <div class="card">
+      <h2>🔢 Cantidad en ubicación</h2>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación.</p>
+      <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
+      <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
+      <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
+      <div id="cantInfo" style="margin-top:10px"></div>
+      <div id="cantAjuste" class="hide" style="margin-top:16px">
+        <div class="qty">
+          <button type="button" id="btnCantMenos">−</button>
+          <b id="cantValor">0</b>
+          <button type="button" id="btnCantMas">+</button>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <input id="cantFijar" type="number" inputmode="numeric" placeholder="Fijar cantidad exacta…">
+          <button class="btn sec" id="btnCantFijar" style="margin-top:0;width:auto;flex:0 0 auto;padding:13px 16px">Fijar</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= GESTIÓN DE CANASTILLAS ================= -->
+  <section id="v-canas" class="hide">
+    <div class="card">
+      <h2>📦 Nueva canastilla</h2>
+      <label>Número de canastilla (el que tiene físicamente)</label>
+      <input id="canasNumero" placeholder="Ej: 014" autocomplete="off">
+      <button class="btn" id="btnCanasCrear">➕ Crear canastilla</button>
+    </div>
+    <div class="card">
+      <h2>🔍 Abrir canastilla</h2>
+      <div class="row">
+        <input id="canasBuscar" placeholder="Número de canastilla…" autocomplete="off">
+        <button class="btn sec" id="btnCanasAbrir" style="margin-top:0;width:auto;flex:0 0 auto;padding:13px 16px">Abrir</button>
+      </div>
+      <div class="list" id="canasHist" style="margin-top:8px"></div>
+    </div>
+    <div class="card hide" id="canasPanel">
+      <h2>📦 Canastilla <span id="canasNumActual" style="color:var(--acc)"></span> <span id="canasCount" style="color:var(--mut);font-weight:400;font-size:12px"></span></h2>
+      <div class="seg" id="canasModoSeg">
+        <button type="button" data-m="add" class="on">➕ Agregar</button>
+        <button type="button" data-m="quitar">➖ Restar</button>
+      </div>
+      <input id="canasSerial" placeholder="Escanea o digita el serial…" autocomplete="off" autocapitalize="off" style="margin-top:8px">
+      <button class="btn sec" id="btnCanasScan">📷 Escanear con cámara</button>
+      <div id="canasScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
+      <button class="btn err" id="btnCanasVaciar">🗑 Borrar todos los seriales</button>
+      <div class="list" id="canasSeriales" style="margin-top:10px"></div>
+    </div>
+  </section>
+
   <!-- ================= UBICACIONES ================= -->
   <section id="v-ubic" class="hide">
     <div class="card">
@@ -552,15 +609,12 @@
   <button id="btnMenu" class="menu-btn" type="button"><span class="ico">☰</span>Menú</button>
   <div id="modActual" class="mod-actual"></div>
   <div class="tabscroll">
-    <button data-v="conteo" class="on"><span class="ico">🔢</span>Conteo</button>
-    <button data-v="pend"><span class="ico">📋</span>Ítems</button>
-    <button data-v="comp"><span class="ico">⚖️</span>Compar.</button>
-    <button data-v="mov"><span class="ico">🔄</span>Movim.</button>
-    <button data-v="dash"><span class="ico">📊</span>Dash</button>
-    <button data-v="macs"><span class="ico">🔌</span>MACs</button>
-    <button data-v="ubic"><span class="ico">🔎</span>Ubic.</button>
-    <button data-v="import"><span class="ico">📥</span>Import.</button>
+    <button data-v="cant" class="on"><span class="ico">🔢</span>Cantidad</button>
+    <button data-v="canas"><span class="ico">📦</span>Canastillas</button>
     <button data-v="rack"><span class="ico">🏷</span>Racks</button>
+    <button data-v="ubic"><span class="ico">🔎</span>Ubic.</button>
+    <button data-v="macs"><span class="ico">🔌</span>MACs</button>
+    <button data-v="import"><span class="ico">📥</span>Import.</button>
     <button data-v="conf"><span class="ico">⚙️</span>Config</button>
   </div>
 </nav>
@@ -728,17 +782,15 @@ document.querySelectorAll('.tabscroll button').forEach(function(btn){
     document.querySelectorAll('.tabscroll button').forEach(function(b){b.classList.remove('on');});
     btn.classList.add('on');
     setModActual(btn);
-    ['conteo','pend','comp','mov','dash','macs','ubic','import','rack','conf'].forEach(function(v){
+    ['macs','ubic','import','rack','cant','canas','conf'].forEach(function(v){
       $('v-'+v).classList.toggle('hide', v!==btn.dataset.v);
     });
     if(btn.dataset.v==='ubic') setTimeout(function(){ var e=$('ubicBuscar'); if(e) e.focus(); },50);
-    if(btn.dataset.v==='pend'){ cargarPendientes(); cargarCerrados(); }
-    if(btn.dataset.v==='comp') cargarComparativo();
-    if(btn.dataset.v==='mov') cargarMovimientos();
-    if(btn.dataset.v==='dash') cargarDashboard();
     if(btn.dataset.v==='macs') cargarMacs();
     if(btn.dataset.v==='import'){ cargarImportaciones(); if(!_impChk){ _impChk=true; if(!imp) restaurarImp(); } }
     if(btn.dataset.v==='rack'){ pintarRackUbi(); cargarRacks(); llenarPlantillasHoja(); pintarHoja(); }
+    if(btn.dataset.v==='cant'){ $('cantInfo').innerHTML=''; $('cantAjuste').classList.add('hide'); $('cantConsulta').value=''; }
+    if(btn.dataset.v==='canas') cargarCanastillas();
   };
 });
 
@@ -1271,7 +1323,7 @@ function reanudarItem(i){
   $('zona').value=it.bodega||it.zona||'';
   var sug = it.estado==='REQUIERE_3' ? 3 : (!it.cer1 ? 1 : (!it.cer2 ? 2 : numConteo));
   setNumConteo(sug);
-  document.querySelector('.tabs button[data-v="conteo"]').click();
+  var _btnConteo=document.querySelector('.tabs button[data-v="conteo"]'); if(_btnConteo) _btnConteo.click();
   seleccionarItem(m);
   toast('Reanudando '+it.nombre+' · conteo '+sug);
 }
@@ -1913,6 +1965,153 @@ if($('btnRackScan')) $('btnRackScan').onclick=function(){
     function(texto){ pararRackScan(); consultarRackUI(texto); },
     function(){}
   ).catch(function(e){ pararRackScan(); toast('No pude abrir la cámara: '+String(e&&e.message||e),true); });
+};
+
+// ---- Cantidad en ubicación (escanea el QR del rack y ajusta +/-) ----
+var cantScanCam=null, cantActual=null; // {id, cantidad}
+function pintarCantInfo(r){
+  $('cantInfo').innerHTML = r.campos.filter(function(c){ return c.clave!=='cantidad'; }).map(function(c){
+    return '<div class="item"><span style="color:var(--mut)">'+c.clave+'</span><b>'+(c.valor||'—')+'</b></div>';
+  }).join('');
+}
+function consultarCantUI(code){
+  code=String(code||'').trim(); if(!code) return;
+  $('cantInfo').innerHTML='<div class="item">Consultando…</div>';
+  $('cantAjuste').classList.add('hide');
+  gs('consultarRack',code).then(function(r){
+    if(!r.found){ $('cantInfo').innerHTML='<div class="item" style="color:var(--warn)">No encontré ningún rack con ese código ('+r.id+'). Si es una etiqueta vieja, vuelve a generarla.</div>'; cantActual=null; return; }
+    var cCant=r.campos.filter(function(c){ return c.clave==='cantidad'; })[0];
+    cantActual={id:r.id, cantidad:Number(cCant?cCant.valor:0)||0};
+    pintarCantInfo(r);
+    $('cantValor').textContent=cantActual.cantidad;
+    $('cantFijar').value='';
+    $('cantAjuste').classList.remove('hide');
+    beep(660);
+  }).catch(function(e){ $('cantInfo').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
+}
+if($('cantConsulta')) $('cantConsulta').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); consultarCantUI(this.value); this.value=''; });
+function pararCantScan(){
+  var div=$('cantScanLector');
+  if(cantScanCam){ try{cantScanCam.stop().then(function(){cantScanCam.clear();});}catch(e){} cantScanCam=null; }
+  if(div) div.classList.add('hide'); if($('btnCantScan')) $('btnCantScan').textContent='📷 Escanear con cámara';
+}
+if($('btnCantScan')) $('btnCantScan').onclick=function(){
+  var div=$('cantScanLector');
+  if(!div.classList.contains('hide')){ pararCantScan(); return; }
+  div.classList.remove('hide'); $('btnCantScan').textContent='⏹ Detener cámara';
+  cantScanCam=new Html5Qrcode('cantScanLector');
+  cantScanCam.start({facingMode:'environment'},{fps:8,qrbox:{width:220,height:220}},
+    function(texto){ pararCantScan(); consultarCantUI(texto); },
+    function(){}
+  ).catch(function(e){ pararCantScan(); toast('No pude abrir la cámara: '+String(e&&e.message||e),true); });
+};
+function aplicarDeltaCant_(delta){
+  if(!cantActual) return;
+  var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
+  gs('ajustarCantidadRack',{id:cantActual.id,delta:delta,usuario:usuario}).then(function(r){
+    cantActual.cantidad=r.cantidad; $('cantValor').textContent=r.cantidad; beep(880);
+  }).catch(function(e){ toast(String(e.message||e),true); });
+}
+if($('btnCantMas')) $('btnCantMas').onclick=function(){ aplicarDeltaCant_(1); };
+if($('btnCantMenos')) $('btnCantMenos').onclick=function(){ aplicarDeltaCant_(-1); };
+if($('btnCantFijar')) $('btnCantFijar').onclick=function(){
+  if(!cantActual) return;
+  var v=Number($('cantFijar').value);
+  if(isNaN(v) || v<0){ toast('Escribe una cantidad válida',true); return; }
+  aplicarDeltaCant_(v-cantActual.cantidad);
+};
+
+// ---- Gestión de canastillas ----
+var canasActual=null, canasModo='add', canasScanCam=null;
+function cargarCanastillas(){
+  gs('listarCanastillas', $('canasBuscar')?$('canasBuscar').value.trim():'').then(function(list){
+    pintarCanastillas(list);
+  }).catch(function(e){ toast(String(e.message||e),true); });
+}
+function pintarCanastillas(list){
+  var box=$('canasHist'); if(!box) return;
+  if(!list.length){ box.innerHTML='<div class="item" style="color:var(--mut)">Sin canastillas todavía.</div>'; return; }
+  box.innerHTML=list.map(function(c){
+    return '<div class="item" style="cursor:pointer" data-num="'+c.numero+'"><span>'+c.numero+'</span><b>'+c.total+' serial'+(c.total===1?'':'es')+'</b></div>';
+  }).join('');
+  Array.prototype.forEach.call(box.querySelectorAll('[data-num]'),function(el){
+    el.onclick=function(){ abrirCanastillaUI(el.dataset.num); };
+  });
+}
+var _canasFiltroT=null;
+if($('canasBuscar')) $('canasBuscar').addEventListener('input',function(){ clearTimeout(_canasFiltroT); _canasFiltroT=setTimeout(cargarCanastillas,300); });
+if($('btnCanasCrear')) $('btnCanasCrear').onclick=function(){
+  var numero=$('canasNumero').value.trim();
+  if(!numero){ toast('Escribe el número de la canastilla',true); return; }
+  var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
+  var b=$('btnCanasCrear'); b.disabled=true;
+  gs('crearCanastilla',{numero:numero,usuario:usuario}).then(function(){
+    toast('Canastilla '+numero+' creada'); $('canasNumero').value='';
+    cargarCanastillas(); abrirCanastillaUI(numero);
+  }).catch(function(e){ toast(String(e.message||e),true); })
+    .finally(function(){ b.disabled=false; });
+};
+if($('btnCanasAbrir')) $('btnCanasAbrir').onclick=function(){ abrirCanastillaUI($('canasBuscar').value.trim()); };
+function pintarCanasSeriales(r){
+  $('canasNumActual').textContent=r.numero;
+  $('canasCount').textContent=r.seriales.length+' serial'+(r.seriales.length===1?'':'es');
+  var box=$('canasSeriales');
+  if(!r.seriales.length){ box.innerHTML='<div class="item" style="color:var(--mut)">Sin seriales todavía.</div>'; return; }
+  box.innerHTML=r.seriales.map(function(s){
+    return '<div class="item"><span>'+s.serial+'</span><small style="color:var(--mut)">'+s.timestamp+'</small></div>';
+  }).join('');
+}
+function abrirCanastillaUI(numero){
+  numero=String(numero||'').trim(); if(!numero) return;
+  gs('consultarCanastilla',numero).then(function(r){
+    if(!r.found){ toast('No existe la canastilla '+numero,true); return; }
+    canasActual=numero;
+    $('canasPanel').classList.remove('hide');
+    pintarCanasSeriales(r);
+    $('canasSerial').value=''; $('canasSerial').focus();
+  }).catch(function(e){ toast(String(e.message||e),true); });
+}
+if($('canasModoSeg')) Array.prototype.forEach.call(document.querySelectorAll('#canasModoSeg button'),function(b){
+  b.onclick=function(){
+    Array.prototype.forEach.call(document.querySelectorAll('#canasModoSeg button'),function(x){x.classList.remove('on');});
+    b.classList.add('on'); canasModo=b.dataset.m;
+  };
+});
+function procesarSerialCanas(raw){
+  raw=String(raw||'').trim(); if(!raw) return;
+  if(!canasActual){ toast('Primero abre o crea una canastilla',true); return; }
+  var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
+  var fn = canasModo==='quitar' ? 'quitarSerialCanastilla' : 'agregarSerialCanastilla';
+  gs(fn,{numero:canasActual,serial:raw,usuario:usuario}).then(function(){
+    beep(canasModo==='quitar'?440:880);
+    gs('consultarCanastilla',canasActual).then(pintarCanasSeriales);
+    cargarCanastillas();
+  }).catch(function(e){ beep(220); toast(String(e.message||e),true); });
+}
+if($('canasSerial')) $('canasSerial').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); procesarSerialCanas(this.value); this.value=''; });
+function pararCanasScan(){
+  var div=$('canasScanLector');
+  if(canasScanCam){ try{canasScanCam.stop().then(function(){canasScanCam.clear();});}catch(e){} canasScanCam=null; }
+  if(div) div.classList.add('hide'); if($('btnCanasScan')) $('btnCanasScan').textContent='📷 Escanear con cámara';
+}
+if($('btnCanasScan')) $('btnCanasScan').onclick=function(){
+  var div=$('canasScanLector');
+  if(!div.classList.contains('hide')){ pararCanasScan(); return; }
+  div.classList.remove('hide'); $('btnCanasScan').textContent='⏹ Detener cámara';
+  canasScanCam=new Html5Qrcode('canasScanLector');
+  canasScanCam.start({facingMode:'environment'},{fps:8,qrbox:{width:260,height:140}},
+    function(texto){ procesarSerialCanas(texto); },
+    function(){}
+  ).catch(function(e){ pararCanasScan(); toast('No pude abrir la cámara: '+String(e&&e.message||e),true); });
+};
+if($('btnCanasVaciar')) $('btnCanasVaciar').onclick=function(){
+  if(!canasActual) return;
+  if(!confirm('¿Borrar TODOS los seriales de la canastilla '+canasActual+'? Esta acción no se puede deshacer.')) return;
+  gs('vaciarCanastilla',canasActual).then(function(){
+    toast('Canastilla '+canasActual+' vaciada');
+    gs('consultarCanastilla',canasActual).then(pintarCanasSeriales);
+    cargarCanastillas();
+  }).catch(function(e){ toast(String(e.message||e),true); });
 };
 
 // ---- Hoja de impresión: varias etiquetas / copias en una misma hoja ----
