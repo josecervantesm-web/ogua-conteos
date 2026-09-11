@@ -2045,13 +2045,23 @@ if($('btnCanasCrear')) $('btnCanasCrear').onclick=function(){
   if(!numero){ toast('Escribe el número de la canastilla',true); return; }
   var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
   var b=$('btnCanasCrear'); b.disabled=true;
-  gs('crearCanastilla',{numero:numero,usuario:usuario}).then(function(){
+  gs('crearCanastilla',{numero:numero,usuario:usuario}).then(function(r){
+    // el backend ya devuelve la canastilla lista para abrir (seriales:[]): sin llamada extra.
     toast('Canastilla '+numero+' creada'); $('canasNumero').value='';
-    cargarCanastillas(); abrirCanastillaUI(numero);
+    canasActual=r.numero;
+    $('canasPanel').classList.remove('hide');
+    pintarCanasSeriales(r);
+    $('canasSerial').value=''; $('canasSerial').focus();
+    cargarCanastillas();
   }).catch(function(e){ toast(String(e.message||e),true); })
     .finally(function(){ b.disabled=false; });
 };
 if($('btnCanasAbrir')) $('btnCanasAbrir').onclick=function(){ abrirCanastillaUI($('canasBuscar').value.trim()); };
+function actualizarContadorLocal(numero,total){
+  // actualiza solo el contador de esa canastilla en la lista ya pintada, sin recargarla del servidor.
+  var el=document.querySelector('#canasHist [data-num="'+numero+'"] b');
+  if(el) el.textContent=total+' serial'+(total===1?'':'es');
+}
 function pintarCanasSeriales(r){
   $('canasNumActual').textContent=r.numero;
   $('canasCount').textContent=r.seriales.length+' serial'+(r.seriales.length===1?'':'es');
@@ -2082,10 +2092,11 @@ function procesarSerialCanas(raw){
   if(!canasActual){ toast('Primero abre o crea una canastilla',true); return; }
   var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
   var fn = canasModo==='quitar' ? 'quitarSerialCanastilla' : 'agregarSerialCanastilla';
-  gs(fn,{numero:canasActual,serial:raw,usuario:usuario}).then(function(){
+  gs(fn,{numero:canasActual,serial:raw,usuario:usuario}).then(function(r){
+    // el backend ya devuelve la lista actualizada: una sola llamada por escaneo (antes eran 3).
     beep(canasModo==='quitar'?440:880);
-    gs('consultarCanastilla',canasActual).then(pintarCanasSeriales);
-    cargarCanastillas();
+    pintarCanasSeriales(r);
+    actualizarContadorLocal(r.numero,r.seriales.length);
   }).catch(function(e){ beep(220); toast(String(e.message||e),true); });
 }
 if($('canasSerial')) $('canasSerial').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); procesarSerialCanas(this.value); this.value=''; });
@@ -2107,10 +2118,10 @@ if($('btnCanasScan')) $('btnCanasScan').onclick=function(){
 if($('btnCanasVaciar')) $('btnCanasVaciar').onclick=function(){
   if(!canasActual) return;
   if(!confirm('¿Borrar TODOS los seriales de la canastilla '+canasActual+'? Esta acción no se puede deshacer.')) return;
-  gs('vaciarCanastilla',canasActual).then(function(){
+  gs('vaciarCanastilla',canasActual).then(function(r){
     toast('Canastilla '+canasActual+' vaciada');
-    gs('consultarCanastilla',canasActual).then(pintarCanasSeriales);
-    cargarCanastillas();
+    pintarCanasSeriales(r);
+    actualizarContadorLocal(r.numero,0);
   }).catch(function(e){ toast(String(e.message||e),true); });
 };
 
