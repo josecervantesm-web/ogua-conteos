@@ -538,7 +538,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación.</p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-c</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -1985,7 +1985,7 @@ function consultarCantUI(code){
     if(!r.found){ $('cantInfo').innerHTML='<div class="item" style="color:var(--warn)">No encontré ningún rack con ese código ('+r.id+'). Si es una etiqueta vieja, vuelve a generarla.</div>'; cantActual=null; return; }
     var cCant=r.campos.filter(function(c){ return c.clave==='cantidad'; })[0];
     cantActual={id:r.id, cantidad:Number(cCant?cCant.valor:0)||0};
-    cantPend=0; cantSending=false; cantInd_('');
+    cantPend=0; cantSending=false; cantEstado_('');
     pintarCantInfo(r);
     $('cantValor').textContent=cantActual.cantidad;
     $('cantFijar').value='';
@@ -2011,21 +2011,34 @@ if($('btnCantScan')) $('btnCantScan').onclick=function(){
 };
 var cantPend=0, cantTimer=null, cantSending=false;
 function cantUsuario_(){ return ($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||''; }
-function cantMostrar(){ if($('cantValor')&&cantActual) $('cantValor').textContent=Math.max(0,cantActual.cantidad+cantPend); }
-function cantInd_(t){ var i=$('cantGuardando'); if(i) i.textContent=t||''; }
+function cantMostrar(){
+  if($('cantValor')&&cantActual){
+    $('cantValor').textContent=Math.max(0,cantActual.cantidad+cantPend);
+    $('cantValor').style.opacity=(cantPend!==0||cantSending)?'0.45':'1';
+  }
+}
+// Estados visibles del guardado: ''(nada) | pend | save | ok | err
+function cantEstado_(e){
+  var i=$('cantGuardando'); if(!i) return;
+  var css={ pend:['●  Sin guardar','#b26a00','#fff3e0'], save:['⏳  Guardando…','#b26a00','#fff3e0'],
+            ok:['✔  Guardado','#1b8a3a','#e7f6ec'], err:['⚠  Sin conexión — reintentando…','#c62828','#fdecea'] };
+  if(css[e]){ i.textContent=css[e][0]; i.style.color=css[e][1]; i.style.background=css[e][2];
+    i.style.fontWeight='700'; i.style.borderRadius='8px'; i.style.padding='4px 8px'; i.style.display='inline-block'; }
+  else { i.textContent=''; i.style.background='transparent'; i.style.fontWeight='400'; i.style.padding='0'; }
+}
 function cantFlush(){
   if(!cantActual || cantSending || cantPend===0) return;
-  var id=cantActual.id, delta=cantPend; cantPend=0; cantSending=true; cantInd_('Guardando…');
+  var id=cantActual.id, delta=cantPend; cantPend=0; cantSending=true; cantMostrar(); cantEstado_('save');
   gs('ajustarCantidadRack',{id:id,delta:delta,usuario:cantUsuario_()}).then(function(r){
     cantSending=false;
     if(cantActual && cantActual.id===id){
       cantActual.cantidad=r.cantidad; cantMostrar();
       if(cantPend!==0) cantFlush();
-      else { cantInd_('Guardado ✓'); setTimeout(function(){ if(!cantSending&&cantPend===0) cantInd_(''); },1200); }
+      else { cantEstado_('ok'); setTimeout(function(){ if(!cantSending&&cantPend===0) cantEstado_(''); },1400); }
     }
   }).catch(function(e){
     cantSending=false;
-    if(cantActual && cantActual.id===id){ cantPend+=delta; cantInd_('⚠ sin guardar, reintentando…'); clearTimeout(cantTimer); cantTimer=setTimeout(cantFlush,1500); }
+    if(cantActual && cantActual.id===id){ cantPend+=delta; cantMostrar(); cantEstado_('err'); clearTimeout(cantTimer); cantTimer=setTimeout(cantFlush,1500); }
     else toast(String(e.message||e),true);
   });
 }
@@ -2033,8 +2046,8 @@ function aplicarDeltaCant_(delta){
   if(!cantActual) return;
   if(cantActual.cantidad+cantPend+delta<0) delta=-(cantActual.cantidad+cantPend);
   if(delta===0) return;
-  cantPend+=delta; cantMostrar(); beep(880); cantInd_('Sin guardar…');
-  clearTimeout(cantTimer); cantTimer=setTimeout(cantFlush,700);
+  cantPend+=delta; cantMostrar(); beep(880); cantEstado_('pend');
+  clearTimeout(cantTimer); cantTimer=setTimeout(cantFlush,600);
 }
 if($('btnCantMas')) $('btnCantMas').onclick=function(){ aplicarDeltaCant_(1); };
 if($('btnCantMenos')) $('btnCantMenos').onclick=function(){ aplicarDeltaCant_(-1); };
