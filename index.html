@@ -549,6 +549,7 @@
           <b id="cantValor">0</b>
           <button type="button" id="btnCantMas">+</button>
         </div>
+        <div id="cantGuardando" style="text-align:center;color:var(--mut);font-size:12px;min-height:16px;margin-top:4px"></div>
         <div class="row" style="margin-top:12px">
           <input id="cantFijar" type="number" inputmode="numeric" placeholder="Fijar cantidad exacta…">
           <button class="btn sec" id="btnCantFijar" style="margin-top:0;width:auto;flex:0 0 auto;padding:13px 16px">Fijar</button>
@@ -1976,12 +1977,15 @@ function pintarCantInfo(r){
 }
 function consultarCantUI(code){
   code=String(code||'').trim(); if(!code) return;
+  if(cantActual && cantPend!==0 && !cantSending) cantFlush();
+  clearTimeout(cantTimer);
   $('cantInfo').innerHTML='<div class="item">Consultando…</div>';
   $('cantAjuste').classList.add('hide');
   gs('consultarRack',code).then(function(r){
     if(!r.found){ $('cantInfo').innerHTML='<div class="item" style="color:var(--warn)">No encontré ningún rack con ese código ('+r.id+'). Si es una etiqueta vieja, vuelve a generarla.</div>'; cantActual=null; return; }
     var cCant=r.campos.filter(function(c){ return c.clave==='cantidad'; })[0];
     cantActual={id:r.id, cantidad:Number(cCant?cCant.valor:0)||0};
+    cantPend=0; cantSending=false; cantInd_('');
     pintarCantInfo(r);
     $('cantValor').textContent=cantActual.cantidad;
     $('cantFijar').value='';
@@ -2005,12 +2009,32 @@ if($('btnCantScan')) $('btnCantScan').onclick=function(){
     function(){}
   ).catch(function(e){ pararCantScan(); toast('No pude abrir la cámara: '+String(e&&e.message||e),true); });
 };
+var cantPend=0, cantTimer=null, cantSending=false;
+function cantUsuario_(){ return ($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||''; }
+function cantMostrar(){ if($('cantValor')&&cantActual) $('cantValor').textContent=Math.max(0,cantActual.cantidad+cantPend); }
+function cantInd_(t){ var i=$('cantGuardando'); if(i) i.textContent=t||''; }
+function cantFlush(){
+  if(!cantActual || cantSending || cantPend===0) return;
+  var id=cantActual.id, delta=cantPend; cantPend=0; cantSending=true; cantInd_('Guardando…');
+  gs('ajustarCantidadRack',{id:id,delta:delta,usuario:cantUsuario_()}).then(function(r){
+    cantSending=false;
+    if(cantActual && cantActual.id===id){
+      cantActual.cantidad=r.cantidad; cantMostrar();
+      if(cantPend!==0) cantFlush();
+      else { cantInd_('Guardado ✓'); setTimeout(function(){ if(!cantSending&&cantPend===0) cantInd_(''); },1200); }
+    }
+  }).catch(function(e){
+    cantSending=false;
+    if(cantActual && cantActual.id===id){ cantPend+=delta; cantInd_('⚠ sin guardar, reintentando…'); clearTimeout(cantTimer); cantTimer=setTimeout(cantFlush,1500); }
+    else toast(String(e.message||e),true);
+  });
+}
 function aplicarDeltaCant_(delta){
   if(!cantActual) return;
-  var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
-  gs('ajustarCantidadRack',{id:cantActual.id,delta:delta,usuario:usuario}).then(function(r){
-    cantActual.cantidad=r.cantidad; $('cantValor').textContent=r.cantidad; beep(880);
-  }).catch(function(e){ toast(String(e.message||e),true); });
+  if(cantActual.cantidad+cantPend+delta<0) delta=-(cantActual.cantidad+cantPend);
+  if(delta===0) return;
+  cantPend+=delta; cantMostrar(); beep(880); cantInd_('Sin guardar…');
+  clearTimeout(cantTimer); cantTimer=setTimeout(cantFlush,700);
 }
 if($('btnCantMas')) $('btnCantMas').onclick=function(){ aplicarDeltaCant_(1); };
 if($('btnCantMenos')) $('btnCantMenos').onclick=function(){ aplicarDeltaCant_(-1); };
@@ -2018,7 +2042,7 @@ if($('btnCantFijar')) $('btnCantFijar').onclick=function(){
   if(!cantActual) return;
   var v=Number($('cantFijar').value);
   if(isNaN(v) || v<0){ toast('Escribe una cantidad válida',true); return; }
-  aplicarDeltaCant_(v-cantActual.cantidad);
+  cantPend = v - cantActual.cantidad; cantMostrar(); clearTimeout(cantTimer); cantFlush();
 };
 
 // ---- Gestión de canastillas ----
@@ -2045,23 +2069,13 @@ if($('btnCanasCrear')) $('btnCanasCrear').onclick=function(){
   if(!numero){ toast('Escribe el número de la canastilla',true); return; }
   var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
   var b=$('btnCanasCrear'); b.disabled=true;
-  gs('crearCanastilla',{numero:numero,usuario:usuario}).then(function(r){
-    // el backend ya devuelve la canastilla lista para abrir (seriales:[]): sin llamada extra.
+  gs('crearCanastilla',{numero:numero,usuario:usuario}).then(function(){
     toast('Canastilla '+numero+' creada'); $('canasNumero').value='';
-    canasActual=r.numero;
-    $('canasPanel').classList.remove('hide');
-    pintarCanasSeriales(r);
-    $('canasSerial').value=''; $('canasSerial').focus();
-    cargarCanastillas();
+    cargarCanastillas(); abrirCanastillaUI(numero);
   }).catch(function(e){ toast(String(e.message||e),true); })
     .finally(function(){ b.disabled=false; });
 };
 if($('btnCanasAbrir')) $('btnCanasAbrir').onclick=function(){ abrirCanastillaUI($('canasBuscar').value.trim()); };
-function actualizarContadorLocal(numero,total){
-  // actualiza solo el contador de esa canastilla en la lista ya pintada, sin recargarla del servidor.
-  var el=document.querySelector('#canasHist [data-num="'+numero+'"] b');
-  if(el) el.textContent=total+' serial'+(total===1?'':'es');
-}
 function pintarCanasSeriales(r){
   $('canasNumActual').textContent=r.numero;
   $('canasCount').textContent=r.seriales.length+' serial'+(r.seriales.length===1?'':'es');
@@ -2092,11 +2106,10 @@ function procesarSerialCanas(raw){
   if(!canasActual){ toast('Primero abre o crea una canastilla',true); return; }
   var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
   var fn = canasModo==='quitar' ? 'quitarSerialCanastilla' : 'agregarSerialCanastilla';
-  gs(fn,{numero:canasActual,serial:raw,usuario:usuario}).then(function(r){
-    // el backend ya devuelve la lista actualizada: una sola llamada por escaneo (antes eran 3).
+  gs(fn,{numero:canasActual,serial:raw,usuario:usuario}).then(function(){
     beep(canasModo==='quitar'?440:880);
-    pintarCanasSeriales(r);
-    actualizarContadorLocal(r.numero,r.seriales.length);
+    gs('consultarCanastilla',canasActual).then(pintarCanasSeriales);
+    cargarCanastillas();
   }).catch(function(e){ beep(220); toast(String(e.message||e),true); });
 }
 if($('canasSerial')) $('canasSerial').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); procesarSerialCanas(this.value); this.value=''; });
@@ -2118,10 +2131,10 @@ if($('btnCanasScan')) $('btnCanasScan').onclick=function(){
 if($('btnCanasVaciar')) $('btnCanasVaciar').onclick=function(){
   if(!canasActual) return;
   if(!confirm('¿Borrar TODOS los seriales de la canastilla '+canasActual+'? Esta acción no se puede deshacer.')) return;
-  gs('vaciarCanastilla',canasActual).then(function(r){
+  gs('vaciarCanastilla',canasActual).then(function(){
     toast('Canastilla '+canasActual+' vaciada');
-    pintarCanasSeriales(r);
-    actualizarContadorLocal(r.numero,0);
+    gs('consultarCanastilla',canasActual).then(pintarCanasSeriales);
+    cargarCanastillas();
   }).catch(function(e){ toast(String(e.message||e),true); });
 };
 
