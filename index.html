@@ -4,10 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>OGUA Conteos</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Librerías con "defer": se descargan en paralelo SIN bloquear el primer pintado de la app,
+     y quedan listas antes de que el usuario pueda usarlas (cámara / etiquetas).
+     SheetJS (lector de Excel, ~900 KB) NO va aquí: se carga solo al importar un archivo. -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
 <style>
   :root{
     --bg:#0f1420; --card:#1a2232; --card2:#222c42; --line:#2e3a55;
@@ -538,7 +540,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-c</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-d</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -1485,11 +1487,27 @@ function parseMacsFromWorkbook(wb){
   return {macs:out, modo:'generico', cols:0, bloques:0};
 }
 
+// SheetJS (~900 KB) se carga SOLO aquí, la primera vez que se importa un Excel — no al abrir la app.
+var _xlsxProm=null;
+function cargarXLSX_(){
+  if(window.XLSX) return Promise.resolve();
+  if(_xlsxProm) return _xlsxProm;
+  _xlsxProm=new Promise(function(res,rej){
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.async=true; s.onload=function(){ res(); };
+    s.onerror=function(){ _xlsxProm=null; rej(new Error('No se pudo descargar el lector de Excel')); };
+    document.head.appendChild(s);
+  });
+  return _xlsxProm;
+}
 // ---- leer Excel de MACs esperadas (en el navegador, con SheetJS) ----
 $('btnImpFile').onclick=function(){ $('impFile').value=''; $('impFile').click(); };
 $('impFile').addEventListener('change',function(){
   var f=this.files&&this.files[0];
   if(!f) return;
+  $('impEspInfo').textContent='Preparando el lector de Excel…';
+  cargarXLSX_().then(function(){
   $('impEspInfo').textContent='Leyendo '+f.name+'…';
   var rd=new FileReader();
   rd.onload=function(e){
@@ -1506,6 +1524,7 @@ $('impFile').addEventListener('change',function(){
   };
   rd.onerror=function(){ $('impEspInfo').innerHTML='<span style="color:var(--err)">No pude leer el archivo.</span>'; };
   rd.readAsArrayBuffer(f);
+  }).catch(function(err){ $('impEspInfo').innerHTML='<span style="color:var(--err)">'+String(err&&err.message||err)+'. Revisa tu conexión e inténtalo de nuevo.</span>'; });
 });
 
 // ---- empezar una importación nueva (crea la cabecera en el backend) ----
