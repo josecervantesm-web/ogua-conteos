@@ -130,7 +130,36 @@
 <main>
 
   <!-- ================= CONTEO ================= -->
+  <!-- ================= AUDITORÍAS ================= -->
+  <section id="v-audit" class="hide">
+    <div class="card">
+      <h2>📋 Auditorías</h2>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 8px">Abre una auditoría por bodega, elige en cuál estás contando y ciérrala al terminar. Solo la auditoría <b>activa</b> recibe los conteos.</p>
+      <div id="auditActivaBox" class="item" style="display:block">Cargando…</div>
+    </div>
+    <div class="card">
+      <h2>Nueva auditoría</h2>
+      <label>Nombre</label>
+      <input id="auditNombre" placeholder="Ej: Inventario septiembre — Bodega principal" autocomplete="off">
+      <label>Bodega que se audita</label>
+      <select id="auditBodega"><option value="">Elige bodega…</option></select>
+      <button class="btn ok" id="btnAuditCrear" style="margin-top:12px">➕ Abrir auditoría</button>
+    </div>
+    <div class="card">
+      <h2>Auditorías</h2>
+      <div class="seg" id="auditFiltro" style="margin-bottom:8px">
+        <button type="button" data-f="todas" class="on">Todas</button>
+        <button type="button" data-f="abierta">Abiertas</button>
+        <button type="button" data-f="cerrada">Cerradas</button>
+      </div>
+      <div class="list" id="auditList"><div class="item">Cargando…</div></div>
+    </div>
+  </section>
+
   <section id="v-conteo" class="hide">
+    <div class="card" id="auditBarCard" style="border-left:4px solid var(--acc)">
+      <div id="auditBar" style="font-size:13px;line-height:1.5">Cargando auditoría…</div>
+    </div>
     <div class="card">
       <h2>Sesión de conteo</h2>
       <div class="row">
@@ -191,9 +220,13 @@
   <!-- ================= PENDIENTES ================= -->
   <section id="v-pend" class="hide">
     <div class="card">
-      <h2>Estado de ítems (vista ciega)</h2>
-      <p style="color:var(--mut);font-size:12px">No se muestran cantidades: solo qué conteos existen y si se requiere un 3ro.</p>
-      <select id="pendZona"><option value="">Todas las bodegas</option></select>
+      <h2>📊 Estado de conteos</h2>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 8px">Cómo van los conteos: qué ítems están cerrados, en proceso, requieren 3er conteo o están en revisión. No muestra cantidades (sigue siendo ciego).</p>
+      <div class="row">
+        <div style="flex:1"><label>Auditoría</label><select id="estAud"><option value="">— Auditoría activa —</option></select></div>
+        <div style="flex:1"><label>Bodega</label><select id="pendZona"><option value="">Todas las bodegas</option></select></div>
+      </div>
+      <div id="estResumen" style="margin-top:12px"></div>
       <div class="list" id="pendList" style="margin-top:8px"></div>
     </div>
     <div class="card">
@@ -540,7 +573,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-d</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-e</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -613,6 +646,9 @@
   <div id="modActual" class="mod-actual"></div>
   <div class="tabscroll">
     <button data-v="cant" class="on"><span class="ico">🔢</span>Cantidad</button>
+    <button data-v="audit"><span class="ico">📋</span>Auditorías</button>
+    <button data-v="conteo"><span class="ico">🧮</span>Conteo</button>
+    <button data-v="pend"><span class="ico">📊</span>Estado</button>
     <button data-v="canas"><span class="ico">📦</span>Canastillas</button>
     <button data-v="rack"><span class="ico">🏷</span>Racks</button>
     <button data-v="ubic"><span class="ico">🔎</span>Ubic.</button>
@@ -701,13 +737,15 @@ function iniciar(){
     BOOT=b; MAESTRO=b.maestro.items||[];
     $('subt').textContent = MAESTRO.length+' artículos en maestro · conectado';
     var bods=b.bodegas||[];
-    var zonaSel=$('zona'), pz=$('pendZona'), ub=$('ubiBodega'), cz=$('compZona'), ib=$('impBodega'), rb=$('rackBodega'), uu=$('ubicBodega');
+    var zonaSel=$('zona'), pz=$('pendZona'), ub=$('ubiBodega'), cz=$('compZona'), ib=$('impBodega'), rb=$('rackBodega'), uu=$('ubicBodega'), ab=$('auditBodega'), ez=$('estAudZona');
     zonaSel.innerHTML='<option value="">Elige bodega…</option>';
     pz.innerHTML='<option value="">Todas las bodegas</option>';
     if(cz) cz.innerHTML='<option value="">Todas las bodegas</option>';
     if(ib) ib.innerHTML='<option value="">Elige bodega…</option>';
     if(rb) rb.innerHTML='<option value="">Elige bodega…</option>';
     if(uu) uu.innerHTML='<option value="">Todas las bodegas</option>';
+    if(ab) ab.innerHTML='<option value="">Elige bodega…</option>';
+    if(ez) ez.innerHTML='<option value="">Todas las bodegas</option>';
     ub.innerHTML='';
     bods.forEach(function(z){
       zonaSel.appendChild(new Option(z,z));
@@ -716,6 +754,8 @@ function iniciar(){
       if(ib) ib.appendChild(new Option(z,z));
       if(rb) rb.appendChild(new Option(z,z));
       if(uu) uu.appendChild(new Option(z,z));
+      if(ab) ab.appendChild(new Option(z,z));
+      if(ez) ez.appendChild(new Option(z,z));
       ub.appendChild(new Option(z,z));
     });
     var zg=localStorage.getItem('ogua_zona')||'';
@@ -785,7 +825,7 @@ document.querySelectorAll('.tabscroll button').forEach(function(btn){
     document.querySelectorAll('.tabscroll button').forEach(function(b){b.classList.remove('on');});
     btn.classList.add('on');
     setModActual(btn);
-    ['macs','ubic','import','rack','cant','canas','conf'].forEach(function(v){
+    ['macs','ubic','import','rack','cant','canas','conf','conteo','pend','audit'].forEach(function(v){
       $('v-'+v).classList.toggle('hide', v!==btn.dataset.v);
     });
     if(btn.dataset.v==='ubic') setTimeout(function(){ var e=$('ubicBuscar'); if(e) e.focus(); },50);
@@ -794,6 +834,9 @@ document.querySelectorAll('.tabscroll button').forEach(function(btn){
     if(btn.dataset.v==='rack'){ pintarRackUbi(); cargarRacks(); llenarPlantillasHoja(); pintarHoja(); }
     if(btn.dataset.v==='cant'){ $('cantInfo').innerHTML=''; $('cantAjuste').classList.add('hide'); $('cantConsulta').value=''; }
     if(btn.dataset.v==='canas') cargarCanastillas();
+    if(btn.dataset.v==='conteo') cargarAuditoriaActiva();
+    if(btn.dataset.v==='pend') abrirEstado();
+    if(btn.dataset.v==='audit') cargarAuditorias();
   };
 });
 
@@ -845,7 +888,7 @@ function cargarAvance(){
   var zona=$('zona').value.trim();
   if(!zona){ av.classList.add('hide'); return; }
   av.textContent='Consultando avance…'; av.classList.remove('hide');
-  gs('getDetalleConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo}).then(function(r){
+  gs('getDetalleConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,auditoria:(AUD&&AUD.id)||''}).then(function(r){
     savedMacs=r.macs||[]; savedQty=Number(r.cantidad)||0; conteoCerrado=!!r.cerrado;
     pintarCaptura();
     if(conteoCerrado){
@@ -1190,20 +1233,22 @@ function generarZpl_(d,e,modo){
 
 // ---- guardar conteo ----
 function validarSesion(){
+  if(!AUD || AUD.estado!=='abierta'){ toast('Abre o selecciona una auditoría activa antes de contar (pestaña 📋 Auditorías)',true); return null; }
   var usuario=$('usuario').value.trim();
   if(!usuario){toast('Escribe tu nombre',true);return null;}
   localStorage.setItem('ogua_user',usuario);
   if(!sel){toast('Selecciona un artículo',true);return null;}
-  var zona=$('zona').value.trim();
-  if(!zona){toast('Escribe o elige la zona',true);return null;}
+  // La bodega la fija la auditoría activa (auditoría por bodega).
+  var zona=(AUD.bodega||$('zona').value).trim();
+  if(!zona){toast('La auditoría activa no tiene bodega asignada',true);return null;}
   localStorage.setItem('ogua_zona',zona);
   if(conteoCerrado){toast('Este conteo está cerrado. Reábrelo primero.',true);return null;}
-  return {usuario:usuario,zona:zona,posicion:$('posicion').value.trim()};
+  return {usuario:usuario,zona:zona,posicion:$('posicion').value.trim(),auditoria:AUD.id};
 }
 function opsPendientes(v){
   var ops=[];
-  if(macsSesion.length) ops.push(gs('registrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'mac',macs:macsSesion,usuario:v.usuario,posicion:v.posicion}));
-  if(manualSesion) ops.push(gs('registrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'manual',cantidad:manualSesion,usuario:v.usuario,posicion:v.posicion}));
+  if(macsSesion.length) ops.push(gs('registrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'mac',macs:macsSesion,usuario:v.usuario,posicion:v.posicion,auditoria:v.auditoria}));
+  if(manualSesion) ops.push(gs('registrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,metodo:'manual',cantidad:manualSesion,usuario:v.usuario,posicion:v.posicion,auditoria:v.auditoria}));
   return ops;
 }
 // Guardar avance: registra lo bipeado y deja el conteo abierto para seguir después
@@ -1231,7 +1276,7 @@ $('btnCerrar').onclick=function(){
   Promise.all(opsPendientes(v)).then(function(rs){
     var acc=0; rs.forEach(function(r){ acc+=r.aceptadas||0; });
     etData.cantidad=base+acc;
-    return gs('cerrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,usuario:v.usuario});
+    return gs('cerrarConteo',{zona:v.zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,usuario:v.usuario,auditoria:v.auditoria});
   }).then(function(){
     registrarUbicacionLocal(v.zona,v.posicion);
     toast('Conteo '+numConteo+' cerrado: '+etData.nombre+' ('+etData.cantidad+' unidades)');
@@ -1246,19 +1291,116 @@ $('btnCerrar').onclick=function(){
 $('btnReabrir').onclick=function(){
   if(!sel) return;
   var zona=$('zona').value.trim();
-  gs('reabrirConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo}).then(function(){
+  gs('reabrirConteo',{zona:zona,codigo:sel.c,nombre:sel.n,numConteo:numConteo,auditoria:(AUD&&AUD.id)||''}).then(function(){
     toast('Conteo '+numConteo+' reabierto');
     cargarAvance();
   }).catch(function(e){toast(String(e.message||e),true);});
 };
 
-// ---- pendientes (vista ciega) + reanudar ----
-var PEND=[];
-function cargarPendientes(){
-  $('pendList').innerHTML='<div class="item">Cargando…</div>';
-  gs('getPendientes',$('pendZona').value).then(function(list){
-    PEND=list;
-    if(!list.length){$('pendList').innerHTML='<div class="item">Aún no hay conteos</div>';return;}
+// ---- Auditorías ----
+var AUD=null;            // auditoría activa (objeto) o null
+var AUDITS=[];           // lista de auditorías (módulo Auditorías)
+var auditFiltro='todas';
+function auditPill_(a){
+  return a.estado==='abierta' ? '<span class="pill p-ok">Abierta</span>' : '<span class="pill p-mut">Cerrada</span>';
+}
+function setCapturaHabilitada(on){
+  ['btnGuardar','btnCerrar','scan','cantManual','btnSumar','btnCam','segConteo'].forEach(function(id){
+    var e=$(id); if(e) e.disabled=!on;
+  });
+  document.querySelectorAll('#segConteo button').forEach(function(b){ b.disabled=!on; });
+}
+function pintarAuditBar(){
+  var bar=$('auditBar'); if(!bar) return;
+  var zonaSel=$('zona');
+  if(AUD && AUD.estado==='abierta'){
+    bar.innerHTML='Auditoría activa: <b>'+AUD.nombre+'</b>'+(AUD.bodega?(' · Bodega: <b>'+AUD.bodega+'</b>'):'')+' <span class="pill p-ok">Abierta</span>';
+    if($('auditBarCard')) $('auditBarCard').style.borderLeftColor='var(--ok)';
+    if(zonaSel && AUD.bodega){ zonaSel.value=AUD.bodega; zonaSel.disabled=true; pintarUbicaciones(); }
+    else if(zonaSel){ zonaSel.disabled=false; }
+    setCapturaHabilitada(true);
+  } else {
+    bar.innerHTML='⚠ <b>No hay auditoría activa.</b> Ve a <b>📋 Auditorías</b>, abre o selecciona una para poder contar.';
+    if($('auditBarCard')) $('auditBarCard').style.borderLeftColor='var(--warn)';
+    if(zonaSel) zonaSel.disabled=false;
+    setCapturaHabilitada(false);
+  }
+}
+function cargarAuditoriaActiva(cb){
+  gs('getAuditoriaActiva').then(function(a){ AUD=a||null; pintarAuditBar(); if(cb) cb(); })
+    .catch(function(e){ AUD=null; pintarAuditBar(); toast(String(e.message||e),true); });
+}
+function cargarAuditorias(){
+  cargarAuditoriaActiva();
+  $('auditList').innerHTML='<div class="item">Cargando…</div>';
+  gs('listarAuditorias').then(function(r){
+    AUDITS=r.auditorias||[];
+    var act=AUDITS.filter(function(a){return a.activa;})[0];
+    $('auditActivaBox').innerHTML = act
+      ? ('Activa ahora: <b>'+act.nombre+'</b>'+(act.bodega?(' · '+act.bodega):'')+' '+auditPill_(act))
+      : '<span style="color:var(--warn)">No hay auditoría activa. Abre una nueva o selecciona una abierta.</span>';
+    pintarAuditList();
+  }).catch(function(e){ $('auditList').innerHTML='<div class="item" style="color:var(--err)">'+String(e.message||e)+'</div>'; });
+}
+function pintarAuditList(){
+  var arr=AUDITS.filter(function(a){ return auditFiltro==='todas'||a.estado===auditFiltro; });
+  if(!arr.length){ $('auditList').innerHTML='<div class="item">Sin auditorías</div>'; return; }
+  $('auditList').innerHTML=arr.map(function(a){
+    var acc = a.activa ? '<span class="pill" style="background:var(--acc);color:#fff">● Activa</span>' : '';
+    var botones='';
+    if(a.estado==='abierta'){
+      if(!a.activa) botones+='<button class="btn sec" style="margin:0;padding:8px 10px" onclick="selAudit(\''+a.id+'\')">Seleccionar</button>';
+      botones+='<button class="btn sec" style="margin:0;padding:8px 10px" onclick="cerrarAudit(\''+a.id+'\')">Cerrar</button>';
+    } else {
+      botones+='<button class="btn sec" style="margin:0;padding:8px 10px" onclick="reabrirAudit(\''+a.id+'\')">Reabrir</button>';
+    }
+    return '<div class="item" style="align-items:flex-start"><div><b>'+a.nombre+'</b> '+auditPill_(a)+' '+acc
+      +'<small>'+(a.bodega||'Todas las bodegas')+' · abierta '+(a.apertura||'')+(a.cierre?(' · cerrada '+a.cierre):'')+'</small>'
+      +'<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">'+botones+'</div></div></div>';
+  }).join('');
+}
+document.querySelectorAll('#auditFiltro button').forEach(function(b){
+  b.onclick=function(){ document.querySelectorAll('#auditFiltro button').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); auditFiltro=b.dataset.f; pintarAuditList(); };
+});
+if($('btnAuditCrear')) $('btnAuditCrear').onclick=function(){
+  var nombre=$('auditNombre').value.trim(), bodega=$('auditBodega').value.trim();
+  var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
+  if(!nombre){ toast('Escribe un nombre para la auditoría',true); return; }
+  if(!bodega){ toast('Elige la bodega',true); return; }
+  var b=$('btnAuditCrear'); b.disabled=true; b.textContent='Abriendo…';
+  gs('crearAuditoria',{nombre:nombre,bodega:bodega,usuario:usuario}).then(function(){
+    $('auditNombre').value=''; toast('Auditoría abierta y activada'); cargarAuditorias();
+  }).catch(function(e){ toast(String(e.message||e),true); })
+    .finally(function(){ b.disabled=false; b.textContent='➕ Abrir auditoría'; });
+};
+function selAudit(id){ gs('seleccionarAuditoria',{id:id}).then(function(){ toast('Auditoría seleccionada'); cargarAuditorias(); }).catch(function(e){toast(String(e.message||e),true);}); }
+function cerrarAudit(id){ if(!confirm('¿Cerrar esta auditoría? Quedará de solo lectura (se puede reabrir).')) return; gs('cerrarAuditoria',{id:id,usuario:(localStorage.getItem('ogua_user')||'')}).then(function(){ toast('Auditoría cerrada'); cargarAuditorias(); }).catch(function(e){toast(String(e.message||e),true);}); }
+function reabrirAudit(id){ gs('reabrirAuditoria',{id:id}).then(function(){ toast('Auditoría reabierta'); cargarAuditorias(); }).catch(function(e){toast(String(e.message||e),true);}); }
+
+// ---- Estado de conteos ----
+var PEND=[], EST_VIEW_AUD='';
+function estResumenHTML_(r){
+  function chip(txt,val,cls){ return '<span class="pill '+cls+'" style="margin:2px">'+txt+': <b>'+val+'</b></span>'; }
+  return '<div style="display:flex;flex-wrap:wrap;gap:2px">'
+    +chip('Total',r.total,'p-mut')+chip('Cerrados',r.cerrado,'p-ok')+chip('En proceso',r.enProceso,'p-mut')
+    +chip('Requiere 3er',r.requiere3,'p-warn')+chip('Revisión',r.revision,'p-err')+'</div>';
+}
+function abrirEstado(){
+  gs('listarAuditorias').then(function(r){
+    var sel=$('estAud'); if(sel){ var cur=sel.value; sel.innerHTML='<option value="">— Auditoría activa —</option>';
+      (r.auditorias||[]).forEach(function(a){ sel.appendChild(new Option(a.nombre+(a.activa?' (activa)':'')+' · '+(a.estado==='abierta'?'abierta':'cerrada'), a.id)); });
+      sel.value=cur; }
+    cargarEstadoConteos(); if(typeof cargarCerrados==='function') cargarCerrados();
+  }).catch(function(){ cargarEstadoConteos(); });
+}
+function cargarEstadoConteos(){
+  $('pendList').innerHTML='<div class="item">Cargando…</div>'; $('estResumen').innerHTML='';
+  gs('getEstadoConteos',{auditoria:($('estAud')?$('estAud').value:''),zona:($('pendZona')?$('pendZona').value:'')}).then(function(r){
+    EST_VIEW_AUD=(r.auditoria&&r.auditoria.id)||'';
+    var cab = r.auditoria ? ('Auditoría: <b>'+r.auditoria.nombre+'</b> '+(r.auditoria.estado==='abierta'?'<span class="pill p-ok">Abierta</span>':'<span class="pill p-mut">Cerrada</span>')) : '<span style="color:var(--warn)">No hay auditoría activa. Elige una arriba.</span>';
+    $('estResumen').innerHTML='<div style="margin-bottom:6px">'+cab+'</div>'+estResumenHTML_(r.resumen);
+    var list=r.items||[]; PEND=list;
+    if(!list.length){ $('pendList').innerHTML='<div class="item">Aún no hay conteos en esta auditoría</div>'; return; }
     $('pendList').innerHTML=list.map(function(it,i){
       var pill = it.estado==='CERRADO' ? '<span class="pill p-ok">Cerrado</span>'
         : it.estado==='REQUIERE_3' ? '<span class="pill p-warn">Requiere 3er</span>'
@@ -1270,9 +1412,11 @@ function cargarPendientes(){
       return '<div class="item" style="cursor:pointer" onclick="reanudarItem('+i+')"><div>'+it.nombre
         +'<small>'+it.zona+' · conteos: '+(checks||'—')+' · ▶ toca para reanudar</small></div>'+pill+'</div>';
     }).join('');
-  }).catch(function(e){toast(String(e.message||e),true);});
+  }).catch(function(e){ $('pendList').innerHTML='<div class="item" style="color:var(--err)">'+String(e.message||e)+'</div>'; });
 }
-$('pendZona').onchange=function(){ cargarPendientes(); cargarCerrados(); };
+function cargarPendientes(){ cargarEstadoConteos(); } // alias de compatibilidad
+if($('pendZona')) $('pendZona').onchange=function(){ cargarEstadoConteos(); if(typeof cargarCerrados==='function') cargarCerrados(); };
+if($('estAud')) $('estAud').onchange=cargarEstadoConteos;
 
 // ---- ítems confirmados: generar etiqueta con la cantidad final ----
 var CERR=[];
@@ -1312,6 +1456,8 @@ function regenCodigo(i,modo){
 }
 function reanudarItem(i){
   var it=PEND[i]; if(!it) return;
+  if(!AUD){ toast('Abre o selecciona una auditoría activa para contar',true); return; }
+  if(EST_VIEW_AUD && AUD && EST_VIEW_AUD!==AUD.id){ toast('Estás viendo otra auditoría. Selecciónala como activa para contar en ella.',true); return; }
   if(it.estado==='CERRADO' && !confirm('Este ítem ya está CERRADO. ¿Agregar más unidades de todas formas?')) return;
   if(macsSesion.length||manualSesion){
     if(!confirm('Tienes capturas sin guardar. ¿Descartarlas?')) return;
@@ -1323,7 +1469,6 @@ function reanudarItem(i){
     if((it.codigo&&String(x.c)===String(it.codigo))||norm(x.n)===n){ m=x; break; }
   }
   if(!m) m={c:it.codigo||'',n:it.nombre,b:''};
-  $('zona').value=it.bodega||it.zona||'';
   var sug = it.estado==='REQUIERE_3' ? 3 : (!it.cer1 ? 1 : (!it.cer2 ? 2 : numConteo));
   setNumConteo(sug);
   var _btnConteo=document.querySelector('.tabs button[data-v="conteo"]'); if(_btnConteo) _btnConteo.click();
