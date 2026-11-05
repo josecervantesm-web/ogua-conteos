@@ -227,6 +227,7 @@
         <div style="flex:1"><label>Bodega</label><select id="pendZona"><option value="">Todas las bodegas</option></select></div>
       </div>
       <div id="estResumen" style="margin-top:12px"></div>
+      <button class="btn sec" id="btnExportMacs" style="margin-top:10px">⬇ Excel de MACs (conteos cerrados)</button>
       <div class="list" id="pendList" style="margin-top:8px"></div>
     </div>
     <div class="card">
@@ -573,7 +574,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-e</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-g</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -589,6 +590,7 @@
           <input id="cantFijar" type="number" inputmode="numeric" placeholder="Fijar cantidad exacta…">
           <button class="btn sec" id="btnCantFijar" style="margin-top:0;width:auto;flex:0 0 auto;padding:13px 16px">Fijar</button>
         </div>
+        <div id="cantMovs" style="margin-top:14px;font-size:12px"></div>
       </div>
     </div>
   </section>
@@ -767,7 +769,7 @@ function iniciar(){
     pintarEtList();
     if(typeof pintarPlList==='function'){ pintarPlList(); pintarPlPreview(); }
     if($('qrBase')) $('qrBase').value=(b.config&&b.config.qrBaseUrl)||'';
-    (function(){ var mr=(location.search||'').match(/[?&]rack=([^&]+)/); if(mr){ var t=document.querySelector('.tabs button[data-v="rack"]'); if(t) t.click(); setTimeout(function(){ if(typeof consultarRackUI==='function') consultarRackUI(decodeURIComponent(mr[1])); },300); } })();
+    (function(){ var mr=(location.search||'').match(/[?&]rack=([^&\s]+)/); if(mr){ var t=document.querySelector('.tabs button[data-v="cant"]'); if(t) t.click(); setTimeout(function(){ if(typeof consultarCantUI==='function') consultarCantUI(decodeURIComponent(mr[1])); },300); } })();
     restaurarSesion();
     if(b.errorMaestro) toast('Maestro: '+b.errorMaestro,true);
   }).catch(function(e){
@@ -1417,6 +1419,26 @@ function cargarEstadoConteos(){
 function cargarPendientes(){ cargarEstadoConteos(); } // alias de compatibilidad
 if($('pendZona')) $('pendZona').onchange=function(){ cargarEstadoConteos(); if(typeof cargarCerrados==='function') cargarCerrados(); };
 if($('estAud')) $('estAud').onchange=cargarEstadoConteos;
+// Descargar Excel con las MACs de los conteos CERRADOS (serializables) de la auditoría vista.
+if($('btnExportMacs')) $('btnExportMacs').onclick=function(){
+  var b=$('btnExportMacs'), t=b.textContent; b.disabled=true; b.textContent='Preparando…';
+  cargarXLSX_().then(function(){
+    return gs('exportMacsCerrados',{auditoria:($('estAud')?$('estAud').value:'')});
+  }).then(function(r){
+    if(!r || !r.detalle || !r.detalle.length){ toast('No hay MACs en conteos cerrados de esta auditoría',true); return; }
+    var wb=XLSX.utils.book_new();
+    var res=[['Bodega','Código','Artículo','Conteo confirmado','Cantidad final','N° de MACs']]
+      .concat(r.resumen.map(function(x){ return [x.bodega,x.codigo,x.nombre,x.conteoConfirmado,x.cantidadFinal,x.macs]; }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), 'Resumen');
+    var det=[['Bodega','Código','Artículo','Conteo','MAC','Ubicación','Usuario','Fecha']]
+      .concat(r.detalle.map(function(x){ return [x.bodega,x.codigo,x.nombre,x.conteo,x.mac,x.pos,x.usuario,x.fecha]; }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), 'MACs');
+    var nom=((r.auditoria&&r.auditoria.nombre)||'auditoria').replace(/[^\w\-]+/g,'_');
+    XLSX.writeFile(wb, 'MACs-cerrados-'+nom+'.xlsx');
+    toast('Excel generado: '+r.detalle.length+' MACs en '+r.resumen.length+' ítems');
+  }).catch(function(e){ toast(String(e.message||e),true); })
+    .finally(function(){ b.disabled=false; b.textContent=t; });
+};
 
 // ---- ítems confirmados: generar etiqueta con la cantidad final ----
 var CERR=[];
@@ -2139,6 +2161,18 @@ function pintarCantInfo(r){
     return '<div class="item"><span style="color:var(--mut)">'+c.clave+'</span><b>'+(c.valor||'—')+'</b></div>';
   }).join('');
 }
+function cargarCantMovs(id){
+  var box=$('cantMovs'); if(!box) return;
+  if(!id){ box.innerHTML=''; return; }
+  gs('getRackMovimientos',{id:id,limit:12}).then(function(list){
+    if(!list||!list.length){ box.innerHTML='<div style="color:var(--mut)">Sin movimientos registrados todavía.</div>'; return; }
+    box.innerHTML='<div style="color:var(--mut);margin-bottom:4px">Últimos movimientos (entradas/salidas)</div>'+list.map(function(m){
+      var signo=m.delta>0?('+'+m.delta):String(m.delta);
+      var col=m.delta>0?'var(--ok)':'var(--err)';
+      return '<div class="item" style="padding:6px 8px"><div>'+(m.ts||m.fecha)+(m.usuario?(' · '+m.usuario):'')+'</div><b style="color:'+col+'">'+signo+'</b> → '+m.cantidad+'</div>';
+    }).join('');
+  }).catch(function(){ box.innerHTML=''; });
+}
 function consultarCantUI(code){
   code=String(code||'').trim(); if(!code) return;
   if(cantActual && cantPend!==0 && !cantSending) cantFlush();
@@ -2146,7 +2180,7 @@ function consultarCantUI(code){
   $('cantInfo').innerHTML='<div class="item">Consultando…</div>';
   $('cantAjuste').classList.add('hide');
   gs('consultarRack',code).then(function(r){
-    if(!r.found){ $('cantInfo').innerHTML='<div class="item" style="color:var(--warn)">No encontré ningún rack con ese código ('+r.id+'). Si es una etiqueta vieja, vuelve a generarla.</div>'; cantActual=null; return; }
+    if(!r.found){ $('cantInfo').innerHTML='<div class="item" style="color:var(--warn)">No encontré ningún rack con ese código ('+r.id+'). Si es una etiqueta vieja, vuelve a generarla.</div>'; cantActual=null; cargarCantMovs(''); return; }
     var cCant=r.campos.filter(function(c){ return c.clave==='cantidad'; })[0];
     cantActual={id:r.id, cantidad:Number(cCant?cCant.valor:0)||0};
     cantPend=0; cantSending=false; cantEstado_('');
@@ -2154,6 +2188,7 @@ function consultarCantUI(code){
     $('cantValor').textContent=cantActual.cantidad;
     $('cantFijar').value='';
     $('cantAjuste').classList.remove('hide');
+    cargarCantMovs(cantActual.id);
     beep(660);
   }).catch(function(e){ $('cantInfo').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
 }
@@ -2198,7 +2233,7 @@ function cantFlush(){
     if(cantActual && cantActual.id===id){
       cantActual.cantidad=r.cantidad; cantMostrar();
       if(cantPend!==0) cantFlush();
-      else { cantEstado_('ok'); setTimeout(function(){ if(!cantSending&&cantPend===0) cantEstado_(''); },1400); }
+      else { cantEstado_('ok'); cargarCantMovs(id); setTimeout(function(){ if(!cantSending&&cantPend===0) cantEstado_(''); },1400); }
     }
   }).catch(function(e){
     cantSending=false;
