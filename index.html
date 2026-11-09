@@ -533,6 +533,7 @@
       <div id="rackSel" class="hide" style="margin-top:8px">
         <b id="rackNombre"></b><br><small id="rackCodigo" style="color:var(--mut)"></small>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer"><input type="checkbox" id="rackSerial" style="width:auto;flex:0 0 auto"> Artículo individualizable (se cuenta escaneando cada MAC)</label>
       <button class="btn" id="btnRackGen">🏷 Generar etiqueta</button>
     </div>
     <div class="card">
@@ -574,7 +575,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-g</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-h</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -591,6 +592,16 @@
           <button class="btn sec" id="btnCantFijar" style="margin-top:0;width:auto;flex:0 0 auto;padding:13px 16px">Fijar</button>
         </div>
         <div id="cantMovs" style="margin-top:14px;font-size:12px"></div>
+      </div>
+      <div id="cantSerial" class="hide" style="margin-top:16px">
+        <div style="text-align:center;margin-bottom:8px">MAC en esta ubicación: <b id="cantSerialTotal" style="font-size:26px">0</b></div>
+        <input id="cantSerialScan" placeholder="Escanea o pega una MAC y Enter…" autocomplete="off" autocapitalize="characters">
+        <button class="btn sec" id="btnCantSerialCam">📷 Escanear MAC con cámara</button>
+        <div id="cantSerialLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
+        <div id="cantSerialEstado" style="text-align:center;font-size:12px;min-height:16px;margin-top:4px"></div>
+        <button class="btn sec" id="btnCantSerialQR" style="margin-top:8px">🔳 Generar QR con las MAC</button>
+        <div id="cantSerialQR" class="hide" style="text-align:center;margin-top:10px"></div>
+        <div class="list" id="cantSerialList" style="margin-top:10px"></div>
       </div>
     </div>
   </section>
@@ -834,7 +845,7 @@ document.querySelectorAll('.tabscroll button').forEach(function(btn){
     if(btn.dataset.v==='macs') cargarMacs();
     if(btn.dataset.v==='import'){ cargarImportaciones(); if(!_impChk){ _impChk=true; if(!imp) restaurarImp(); } }
     if(btn.dataset.v==='rack'){ pintarRackUbi(); cargarRacks(); llenarPlantillasHoja(); pintarHoja(); }
-    if(btn.dataset.v==='cant'){ $('cantInfo').innerHTML=''; $('cantAjuste').classList.add('hide'); $('cantConsulta').value=''; }
+    if(btn.dataset.v==='cant'){ $('cantInfo').innerHTML=''; $('cantAjuste').classList.add('hide'); if($('cantSerial'))$('cantSerial').classList.add('hide'); if(typeof pararCantSerialScan==='function')pararCantSerialScan(); $('cantConsulta').value=''; }
     if(btn.dataset.v==='canas') cargarCanastillas();
     if(btn.dataset.v==='conteo') cargarAuditoriaActiva();
     if(btn.dataset.v==='pend') abrirEstado();
@@ -1950,7 +1961,7 @@ $('btnRackGen').onclick=function(){
   if(!ubi){ toast('Escribe la ubicación / rack',true); return; }
   if(!rackSel){ toast('Selecciona el artículo',true); return; }
   var b=$('btnRackGen'); b.disabled=true; b.textContent='Generando…';
-  gs('guardarRack',{bodega:bodega,ubicacion:ubi,codigo:rackSel.c,nombre:rackSel.n,usuario:usuario}).then(function(r){
+  gs('guardarRack',{bodega:bodega,ubicacion:ubi,codigo:rackSel.c,nombre:rackSel.n,usuario:usuario,serializado:($('rackSerial')?$('rackSerial').checked:false)}).then(function(r){
     rackData={id:r.id,bodega:bodega,ubicacion:ubi,codigo:rackSel.c||'',nombre:rackSel.n,payload:r.payload};
     registrarUbicacionLocal(bodega,ubi);
     mostrarRackEtiqueta(rackData);
@@ -2177,21 +2188,98 @@ function consultarCantUI(code){
   code=String(code||'').trim(); if(!code) return;
   if(cantActual && cantPend!==0 && !cantSending) cantFlush();
   clearTimeout(cantTimer);
+  if(typeof pararCantSerialScan==='function') pararCantSerialScan();
   $('cantInfo').innerHTML='<div class="item">Consultando…</div>';
-  $('cantAjuste').classList.add('hide');
+  $('cantAjuste').classList.add('hide'); if($('cantSerial')) $('cantSerial').classList.add('hide');
   gs('consultarRack',code).then(function(r){
     if(!r.found){ $('cantInfo').innerHTML='<div class="item" style="color:var(--warn)">No encontré ningún rack con ese código ('+r.id+'). Si es una etiqueta vieja, vuelve a generarla.</div>'; cantActual=null; cargarCantMovs(''); return; }
     var cCant=r.campos.filter(function(c){ return c.clave==='cantidad'; })[0];
-    cantActual={id:r.id, cantidad:Number(cCant?cCant.valor:0)||0};
+    cantActual={id:r.id, cantidad:Number(cCant?cCant.valor:0)||0, serializado:!!r.serializado};
     cantPend=0; cantSending=false; cantEstado_('');
     pintarCantInfo(r);
-    $('cantValor').textContent=cantActual.cantidad;
-    $('cantFijar').value='';
-    $('cantAjuste').classList.remove('hide');
-    cargarCantMovs(cantActual.id);
+    if(r.serializado){
+      if($('cantSerialQR')){ $('cantSerialQR').classList.add('hide'); $('cantSerialQR').innerHTML=''; }
+      cantSerialEstado_('');
+      $('cantSerial').classList.remove('hide');
+      cargarMacsRack(cantActual.id);
+      cargarCantMovs('');
+    } else {
+      $('cantValor').textContent=cantActual.cantidad;
+      $('cantFijar').value='';
+      $('cantAjuste').classList.remove('hide');
+      cargarCantMovs(cantActual.id);
+    }
     beep(660);
   }).catch(function(e){ $('cantInfo').innerHTML='<div class="item" style="color:#e33">'+String(e.message||e)+'</div>'; });
 }
+// ---- Artículos individualizables: MAC por ubicación (escanea para sumar/restar) ----
+var cantSerialCam=null, cantSerialMacs=[];
+function cantSerialEstado_(t,err){ var e=$('cantSerialEstado'); if(e){ e.textContent=t||''; e.style.color=err?'var(--err)':'var(--ok)'; } }
+function cantSerialUsuario_(){ return ($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||''; }
+function cargarMacsRack(id){
+  var box=$('cantSerialList'), tot=$('cantSerialTotal');
+  if(box) box.innerHTML='<div class="item">Cargando…</div>';
+  gs('listarMacsRack',{id:id}).then(function(r){
+    cantSerialMacs=(r&&r.macs)||[];
+    if(tot) tot.textContent=(r&&r.total)||0;
+    if(cantActual) cantActual.cantidad=(r&&r.total)||0;
+    pintarMacsRack();
+  }).catch(function(e){ if(box) box.innerHTML='<div class="item" style="color:var(--err)">'+String(e.message||e)+'</div>'; });
+}
+function pintarMacsRack(){
+  var box=$('cantSerialList'); if(!box) return;
+  if(!cantSerialMacs.length){ box.innerHTML='<div class="item">Sin MAC en esta ubicación todavía.</div>'; return; }
+  box.innerHTML=cantSerialMacs.map(function(m){
+    return '<div class="item"><div><b>'+m.mac+'</b><small>'+(m.ts||'')+(m.usuario?(' · '+m.usuario):'')+'</small></div>'
+      +'<button class="btn sec" style="margin:0;padding:6px 10px" onclick="quitarMacSerial(\''+m.mac+'\')">Quitar</button></div>';
+  }).join('');
+}
+function agregarMacSerial(mac){
+  mac=String(mac||'').trim(); if(!mac||!cantActual) return;
+  cantSerialEstado_('Agregando…');
+  gs('agregarMacRack',{id:cantActual.id,mac:mac,usuario:cantSerialUsuario_()}).then(function(r){
+    if(r.ya) cantSerialEstado_('Esa MAC ya estaba aquí');
+    else { cantSerialEstado_('✔ +1 · '+(r.mac||mac)); beep(880); }
+    cargarMacsRack(cantActual.id);
+  }).catch(function(e){ cantSerialEstado_(String(e.message||e),true); });
+}
+function quitarMacSerial(mac){
+  if(!cantActual) return;
+  if(!confirm('¿Quitar la MAC '+mac+' de esta ubicación?')) return;
+  cantSerialEstado_('Quitando…');
+  gs('quitarMacRack',{id:cantActual.id,mac:mac,usuario:cantSerialUsuario_()}).then(function(){
+    cantSerialEstado_('✔ −1'); beep(440); cargarMacsRack(cantActual.id);
+  }).catch(function(e){ cantSerialEstado_(String(e.message||e),true); });
+}
+if($('cantSerialScan')) $('cantSerialScan').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); agregarMacSerial(this.value); this.value=''; });
+function pararCantSerialScan(){
+  if(cantSerialCam){ try{cantSerialCam.stop().then(function(){cantSerialCam.clear();});}catch(e){} cantSerialCam=null; }
+  var d=$('cantSerialLector'); if(d) d.classList.add('hide'); if($('btnCantSerialCam')) $('btnCantSerialCam').textContent='📷 Escanear MAC con cámara';
+}
+if($('btnCantSerialCam')) $('btnCantSerialCam').onclick=function(){
+  var div=$('cantSerialLector');
+  if(!div.classList.contains('hide')){ pararCantSerialScan(); return; }
+  div.classList.remove('hide'); $('btnCantSerialCam').textContent='⏹ Detener cámara';
+  cantSerialCam=new Html5Qrcode('cantSerialLector');
+  cantSerialCam.start({facingMode:'environment'},{fps:8,qrbox:{width:220,height:220}},
+    function(texto){ agregarMacSerial(texto); },
+    function(){}
+  ).catch(function(e){ pararCantSerialScan(); toast('No pude abrir la cámara: '+String(e&&e.message||e),true); });
+};
+if($('btnCantSerialQR')) $('btnCantSerialQR').onclick=function(){
+  if(!cantActual) return;
+  if(!cantSerialMacs.length){ toast('No hay MAC para generar el QR',true); return; }
+  var box=$('cantSerialQR'); box.innerHTML=''; box.classList.remove('hide');
+  var macs=cantSerialMacs.map(function(m){ return m.mac; });
+  var texto='OGUAMACS|'+cantActual.id+'|'+macs.join(',');
+  if(texto.length>2800){ box.innerHTML='<div style="color:var(--warn)">Demasiadas MAC ('+macs.length+') para un solo QR legible. Reparte la ubicación o usa el listado.</div>'; return; }
+  try{
+    new QRCode(box,{text:texto,width:240,height:240,correctLevel:QRCode.CorrectLevel.L});
+    var cap=document.createElement('div'); cap.style.cssText='font-size:12px;color:var(--mut);margin-top:6px';
+    cap.textContent='Foto de '+macs.length+' MAC · '+(new Date()).toLocaleString('es-CO');
+    box.appendChild(cap);
+  }catch(err){ box.innerHTML='<div style="color:var(--err)">No pude generar el QR (demasiada información). Reduce la cantidad de MAC.</div>'; }
+};
 if($('cantConsulta')) $('cantConsulta').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); consultarCantUI(this.value); this.value=''; });
 function pararCantScan(){
   var div=$('cantScanLector');
