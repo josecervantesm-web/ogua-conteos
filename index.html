@@ -77,17 +77,17 @@
   .mcard h2{color:#111}
   #etQr{display:flex;justify-content:center;padding:10px;background:#fff}
   #etInfo{font-size:13px;text-align:left;margin:8px auto;color:#111;line-height:1.55;max-width:280px}
-  #printLabel{display:none;background:#fff;color:#000;flex-direction:column;justify-content:space-between;padding:2mm;box-sizing:border-box;overflow:hidden}
-  #plName{font-weight:700;line-height:1.15}
+  #printLabel{display:none;background:#fff;color:#000;flex-direction:column;justify-content:center;align-items:center;gap:1.5mm;text-align:center;padding:2mm;box-sizing:border-box;overflow:hidden}
+  #plName{font-weight:700;line-height:1.15;order:1}
   #plInfo{line-height:1.2}
-  #plCodes{display:flex;align-items:center;gap:2mm}
+  #plCodes{display:flex;align-items:center;justify-content:center;gap:2mm;order:0}
   #printSheet{display:none}
   .psheet{position:relative;overflow:hidden;background:#fff;page-break-after:always;break-after:page}
   .psheet:last-child{page-break-after:auto;break-after:auto}
-  .pcell{position:absolute;box-sizing:border-box;display:flex;align-items:center;overflow:hidden;color:#000}
+  .pcell{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;overflow:hidden;color:#000}
   .pcell.test{border:1px dashed #999}
   .pcell .rq img{display:block}
-  .pcell .rt{flex:1;min-width:0;overflow:hidden}
+  .pcell .rt{width:100%;min-width:0;overflow:hidden;text-align:center}
   .pcell .ru{font-weight:700;line-height:1.05;word-break:break-word}
   .pcell .rc{color:#222;line-height:1.1;word-break:break-word}
   @media print{
@@ -576,7 +576,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-j</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-k</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -2070,10 +2070,12 @@ function generarZplRack_(d,e){
   function t(v){ return String(v==null?'':v).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[\^~]/g,' '); }
   var chico=e.h<40;
   var qmag=e.h>=70?5:(e.h>=40?4:3);
-  var x=16, z=['^XA','^CI28','^PW'+W,'^LL'+H,'^LH0,0'];
-  z.push('^FO'+x+',14^BQN,2,'+qmag+'^FDLA,'+t(d.payload)+'^FS');
-  var tx=x+(qmag*30)+16;
-  z.push('^FO'+tx+',16^A0N,'+(chico?24:30)+','+(chico?24:30)+'^FB'+(W-tx-10)+',2,2,L^FD'+t(d.ubicacion)+'^FS');
+  var qw=qmag*30;                          // ancho aprox del QR en puntos
+  var qx=Math.max(8,Math.round((W-qw)/2)); // QR centrado horizontalmente
+  var z=['^XA','^CI28','^PW'+W,'^LL'+H,'^LH0,0'];
+  z.push('^FO'+qx+',12^BQN,2,'+qmag+'^FDLA,'+t(d.payload)+'^FS');
+  var ty=12+qw+8;                          // texto justo debajo del QR
+  z.push('^FO10,'+ty+'^A0N,'+(chico?24:30)+','+(chico?24:30)+'^FB'+(W-20)+',2,2,C^FD'+t(d.ubicacion)+'^FS');
   z.push('^XZ');
   return z.join('\n');
 }
@@ -2534,14 +2536,14 @@ function celdaEtiqueta_(d,p,left,top){
   var cell=document.createElement('div'); cell.className='pcell';
   cell.style.left=left+'mm'; cell.style.top=top+'mm'; cell.style.width=p.labelW+'mm'; cell.style.height=p.labelH+'mm';
   var chico=p.labelH<38;
-  var q=(p.qr>0)?p.qr:Math.max(8, Math.min(p.labelH-3, p.labelW*0.42, 34));
+  var q=(p.qr>0)?p.qr:Math.max(8, Math.min(p.labelW-4, p.labelH*0.62, 34));
   var fU=(p.fUbi>0)?p.fUbi:(chico?7:10);
   var fI=(p.fInfo>0)?p.fInfo:(chico?6:7.5);
   var tmp=document.createElement('div');
   try{ new QRCode(tmp,{text:d.payload,width:240,height:240,correctLevel:QRCode.CorrectLevel.M}); }catch(err){}
   var cv=tmp.querySelector('canvas');
   var img=cv?('<img src="'+cv.toDataURL('image/png')+'" style="width:'+q+'mm;height:'+q+'mm">'):'';
-  cell.innerHTML='<div class="rq" style="padding-left:1.5mm">'+img+'</div><div class="rt" style="padding:0 1.5mm">'
+  cell.innerHTML='<div class="rq">'+img+'</div><div class="rt" style="padding:0.5mm 1mm 0">'
     +'<div class="ru" style="font-size:'+fU+'pt">'+d.ubicacion+'</div></div>';
   return cell;
 }
