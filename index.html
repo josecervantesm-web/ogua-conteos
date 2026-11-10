@@ -576,7 +576,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-k</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-l</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -2334,7 +2334,7 @@ if($('btnCantSerialQR')) $('btnCantSerialQR').onclick=function(){
   if(!cantSerialMacs.length){ toast('No hay MAC para generar el QR',true); return; }
   var box=$('cantSerialQR'); box.innerHTML=''; box.classList.remove('hide');
   var macs=cantSerialMacs.map(function(m){ return fmtMac(m.mac); });
-  var texto='OGUAMACS|'+cantActual.id+'|'+macs.join(',');
+  var texto=macs.join('\n'); // una MAC por línea: al escanear en Excel cae cada MAC en una fila
   if(texto.length>2800){ box.innerHTML='<div style="color:var(--warn)">Demasiadas MAC ('+macs.length+') para un solo QR legible. Reparte la ubicación o usa el listado.</div>'; return; }
   try{
     new QRCode(box,{text:texto,width:240,height:240,correctLevel:QRCode.CorrectLevel.L});
