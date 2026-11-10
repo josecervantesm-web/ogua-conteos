@@ -576,7 +576,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-m</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-n</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -2336,7 +2336,7 @@ if($('btnCantSerialQR')) $('btnCantSerialQR').onclick=function(){
   var macs=cantSerialMacs.map(function(m){ return fmtMac(m.mac); });
   // Se parte en grupos pequeños: un QR con muchas MAC queda demasiado denso para leerlo
   // desde una pantalla. Cada QR va grande y con borde blanco (zona de silencio) para que lea fácil.
-  var POR=18;
+  var POR=40;
   var grupos=[]; for(var i=0;i<macs.length;i+=POR){ grupos.push(macs.slice(i,i+POR)); }
   if(grupos.length>1){
     var head=document.createElement('div'); head.style.cssText='font-size:12px;color:var(--mut);margin-bottom:8px';
