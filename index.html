@@ -576,7 +576,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-l</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-m</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -2334,14 +2334,26 @@ if($('btnCantSerialQR')) $('btnCantSerialQR').onclick=function(){
   if(!cantSerialMacs.length){ toast('No hay MAC para generar el QR',true); return; }
   var box=$('cantSerialQR'); box.innerHTML=''; box.classList.remove('hide');
   var macs=cantSerialMacs.map(function(m){ return fmtMac(m.mac); });
-  var texto=macs.join('\n'); // una MAC por línea: al escanear en Excel cae cada MAC en una fila
-  if(texto.length>2800){ box.innerHTML='<div style="color:var(--warn)">Demasiadas MAC ('+macs.length+') para un solo QR legible. Reparte la ubicación o usa el listado.</div>'; return; }
-  try{
-    new QRCode(box,{text:texto,width:240,height:240,correctLevel:QRCode.CorrectLevel.L});
-    var cap=document.createElement('div'); cap.style.cssText='font-size:12px;color:var(--mut);margin-top:6px';
-    cap.textContent='Foto de '+macs.length+' MAC · '+(new Date()).toLocaleString('es-CO');
-    box.appendChild(cap);
-  }catch(err){ box.innerHTML='<div style="color:var(--err)">No pude generar el QR (demasiada información). Reduce la cantidad de MAC.</div>'; }
+  // Se parte en grupos pequeños: un QR con muchas MAC queda demasiado denso para leerlo
+  // desde una pantalla. Cada QR va grande y con borde blanco (zona de silencio) para que lea fácil.
+  var POR=18;
+  var grupos=[]; for(var i=0;i<macs.length;i+=POR){ grupos.push(macs.slice(i,i+POR)); }
+  if(grupos.length>1){
+    var head=document.createElement('div'); head.style.cssText='font-size:12px;color:var(--mut);margin-bottom:8px';
+    head.textContent=macs.length+' MAC en '+grupos.length+' códigos QR — escanéalos en orden (cada uno agrega su grupo de MAC).';
+    box.appendChild(head);
+  }
+  grupos.forEach(function(g,gi){
+    var wrap=document.createElement('div'); wrap.style.cssText='display:inline-block;vertical-align:top;margin:8px;padding:12px;background:#fff;border-radius:10px';
+    var lab=document.createElement('div'); lab.style.cssText='font-size:12px;color:#333;margin-bottom:6px;font-weight:700;text-align:center';
+    lab.textContent=(grupos.length>1?('Grupo '+(gi+1)+'/'+grupos.length+' · '):'')+g.length+' MAC';
+    wrap.appendChild(lab);
+    var qd=document.createElement('div');
+    try{ new QRCode(qd,{text:g.join('\n'),width:300,height:300,correctLevel:QRCode.CorrectLevel.L}); }
+    catch(err){ qd.innerHTML='<div style="color:#c00">No pude generar este QR</div>'; }
+    wrap.appendChild(qd);
+    box.appendChild(wrap);
+  });
 };
 if($('cantConsulta')) $('cantConsulta').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); consultarCantUI(this.value); this.value=''; });
 function pararCantScan(){
