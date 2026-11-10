@@ -535,6 +535,7 @@
       </div>
       <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer"><input type="checkbox" id="rackSerial" style="width:auto;flex:0 0 auto"> Artículo individualizable (se cuenta escaneando cada MAC)</label>
       <button class="btn" id="btnRackGen">🏷 Generar etiqueta</button>
+      <button class="btn sec hide" id="btnRackCancelEdit" style="margin-top:8px">✖ Cancelar edición</button>
     </div>
     <div class="card">
       <h2>🖨 Hoja de impresión <span id="hojaCount" style="color:var(--mut);font-weight:400;font-size:12px"></span></h2>
@@ -575,7 +576,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-h</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-j</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -595,6 +596,10 @@
       </div>
       <div id="cantSerial" class="hide" style="margin-top:16px">
         <div style="text-align:center;margin-bottom:8px">MAC en esta ubicación: <b id="cantSerialTotal" style="font-size:26px">0</b></div>
+        <div class="seg" id="cantSerialModoSeg" style="margin-bottom:8px">
+          <button type="button" data-m="add" class="on">➕ Agregar</button>
+          <button type="button" data-m="del">➖ Quitar</button>
+        </div>
         <input id="cantSerialScan" placeholder="Escanea o pega una MAC y Enter…" autocomplete="off" autocapitalize="characters">
         <button class="btn sec" id="btnCantSerialCam">📷 Escanear MAC con cámara</button>
         <div id="cantSerialLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -1442,7 +1447,7 @@ if($('btnExportMacs')) $('btnExportMacs').onclick=function(){
       .concat(r.resumen.map(function(x){ return [x.bodega,x.codigo,x.nombre,x.conteoConfirmado,x.cantidadFinal,x.macs]; }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), 'Resumen');
     var det=[['Bodega','Código','Artículo','Conteo','MAC','Ubicación','Usuario','Fecha']]
-      .concat(r.detalle.map(function(x){ return [x.bodega,x.codigo,x.nombre,x.conteo,x.mac,x.pos,x.usuario,x.fecha]; }));
+      .concat(r.detalle.map(function(x){ return [x.bodega,x.codigo,x.nombre,x.conteo,fmtMac(x.mac),x.pos,x.usuario,x.fecha]; }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), 'MACs');
     var nom=((r.auditoria&&r.auditoria.nombre)||'auditoria').replace(/[^\w\-]+/g,'_');
     XLSX.writeFile(wb, 'MACs-cerrados-'+nom+'.xlsx');
@@ -1954,13 +1959,44 @@ autocompletar('rackBuscar','rackOpts',function(it){
   $('rackCodigo').textContent=(it.c?('Código Artemis: '+it.c):'(artículo sin código)');
 });
 
+var editandoRackId=null;
+function limpiarRackForm_(){ $('rackUbi').value=''; rackSel=null; $('rackSel').classList.add('hide'); if($('rackSerial'))$('rackSerial').checked=false; if($('rackBuscar'))$('rackBuscar').value=''; }
+function salirEdicionRack(){ editandoRackId=null; var b=$('btnRackGen'); if(b)b.textContent='🏷 Generar etiqueta'; var c=$('btnRackCancelEdit'); if(c)c.classList.add('hide'); }
+function editarRackHist(i){
+  var r=RACKS[i]; if(!r) return;
+  editandoRackId=r.id;
+  $('rackBodega').value=r.bodega||'';
+  $('rackUbi').value=r.ubicacion||'';
+  rackSel={c:r.codigo||'', n:r.nombre||''};
+  $('rackNombre').textContent=r.nombre||'';
+  $('rackCodigo').textContent=(r.codigo?('Código Artemis: '+r.codigo):'(artículo sin código)');
+  $('rackSel').classList.remove('hide');
+  if($('rackSerial')) $('rackSerial').checked=!!r.serializado;
+  if($('rackBuscar')) $('rackBuscar').value='';
+  var b=$('btnRackGen'); if(b)b.textContent='💾 Guardar cambios (mismo QR)';
+  var c=$('btnRackCancelEdit'); if(c)c.classList.remove('hide');
+  toast('Editando '+r.ubicacion+' — al guardar, el QR NO cambia');
+  try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); }
+}
+if($('btnRackCancelEdit')) $('btnRackCancelEdit').onclick=function(){ salirEdicionRack(); limpiarRackForm_(); toast('Edición cancelada'); };
 $('btnRackGen').onclick=function(){
   var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
   var bodega=$('rackBodega').value.trim();
   var ubi=$('rackUbi').value.trim();
   if(!ubi){ toast('Escribe la ubicación / rack',true); return; }
   if(!rackSel){ toast('Selecciona el artículo',true); return; }
-  var b=$('btnRackGen'); b.disabled=true; b.textContent='Generando…';
+  var b=$('btnRackGen'); b.disabled=true;
+  if(editandoRackId){
+    b.textContent='Guardando…';
+    gs('actualizarRack',{id:editandoRackId,bodega:bodega,ubicacion:ubi,codigo:rackSel.c||'',nombre:rackSel.n,serializado:($('rackSerial')?$('rackSerial').checked:false)}).then(function(){
+      registrarUbicacionLocal(bodega,ubi);
+      toast('Rack actualizado. El QR impreso sigue sirviendo (no cambió).');
+      salirEdicionRack(); limpiarRackForm_(); cargarRacks();
+    }).catch(function(e){ toast(String(e.message||e),true); })
+      .finally(function(){ b.disabled=false; if(!editandoRackId) b.textContent='🏷 Generar etiqueta'; });
+    return;
+  }
+  b.textContent='Generando…';
   gs('guardarRack',{bodega:bodega,ubicacion:ubi,codigo:rackSel.c,nombre:rackSel.n,usuario:usuario,serializado:($('rackSerial')?$('rackSerial').checked:false)}).then(function(r){
     rackData={id:r.id,bodega:bodega,ubicacion:ubi,codigo:rackSel.c||'',nombre:rackSel.n,payload:r.payload};
     registrarUbicacionLocal(bodega,ubi);
@@ -2007,11 +2043,10 @@ if($('btnRackImprimir')) $('btnRackImprimir').onclick=function(){
   var pl=$('printLabel'); pl.style.width=e.w+'mm'; pl.style.height=e.h+'mm';
   var chico=e.h<40;
   $('plName').textContent=rackData.ubicacion;
-  $('plName').style.fontSize=chico?'9pt':'13pt';
-  $('plInfo').textContent=(rackData.codigo?(rackData.codigo+' · '):'')+rackData.nombre;
-  $('plInfo').style.fontSize=chico?'6pt':'8pt';
+  $('plName').style.fontSize=chico?'11pt':'15pt';
+  $('plInfo').textContent=''; $('plInfo').style.display='none';
   var img=$('plQr'), cv=$('rackQr').querySelector('canvas');
-  var q=Math.min(e.h-14,36);
+  var q=Math.min(e.h-10,42);
   if(cv){ img.src=cv.toDataURL('image/png'); img.style.display='block'; img.style.width=q+'mm'; img.style.height=q+'mm'; }
   else img.style.display='none';
   $('plBar').innerHTML=''; $('plBar').style.display='none';
@@ -2038,8 +2073,7 @@ function generarZplRack_(d,e){
   var x=16, z=['^XA','^CI28','^PW'+W,'^LL'+H,'^LH0,0'];
   z.push('^FO'+x+',14^BQN,2,'+qmag+'^FDLA,'+t(d.payload)+'^FS');
   var tx=x+(qmag*30)+16;
-  z.push('^FO'+tx+',16^A0N,'+(chico?24:30)+','+(chico?24:30)+'^FB'+(W-tx-10)+',1,0,L^FD'+t(d.ubicacion)+'^FS');
-  z.push('^FO'+tx+','+(chico?48:64)+'^A0N,20,20^FB'+(W-tx-10)+',2,2,L^FD'+(d.codigo?t(d.codigo)+' - ':'')+t(d.nombre)+'^FS');
+  z.push('^FO'+tx+',16^A0N,'+(chico?24:30)+','+(chico?24:30)+'^FB'+(W-tx-10)+',2,2,L^FD'+t(d.ubicacion)+'^FS');
   z.push('^XZ');
   return z.join('\n');
 }
@@ -2063,6 +2097,7 @@ function pintarRacks(){
       : '<span style="background:var(--card2);color:var(--mut);border-radius:99px;padding:2px 8px;font-size:10.5px;font-weight:700">sin imprimir</span>';
     rows.push('<div class="item"><div><b>'+r.ubicacion+'</b><small>'+(r.codigo?r.codigo+' · ':'')+r.nombre+(r.bodega?(' · '+r.bodega):'')+' · '+r.fecha+' · '+badge+'</small></div>'
       +'<div style="display:flex;gap:6px;flex:0 0 auto">'
+      +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="editarRackHist('+i+')">✏️</button>'
       +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="reimprimirRack('+i+')">🏷</button>'
       +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="agregarHojaHist('+i+')">➕ Hoja</button>'
       +'</div></div>');
@@ -2200,6 +2235,7 @@ function consultarCantUI(code){
     if(r.serializado){
       if($('cantSerialQR')){ $('cantSerialQR').classList.add('hide'); $('cantSerialQR').innerHTML=''; }
       cantSerialEstado_('');
+      if(typeof cantSerialResetModo_==='function') cantSerialResetModo_();
       $('cantSerial').classList.remove('hide');
       cargarMacsRack(cantActual.id);
       cargarCantMovs('');
@@ -2230,7 +2266,7 @@ function pintarMacsRack(){
   var box=$('cantSerialList'); if(!box) return;
   if(!cantSerialMacs.length){ box.innerHTML='<div class="item">Sin MAC en esta ubicación todavía.</div>'; return; }
   box.innerHTML=cantSerialMacs.map(function(m){
-    return '<div class="item"><div><b>'+m.mac+'</b><small>'+(m.ts||'')+(m.usuario?(' · '+m.usuario):'')+'</small></div>'
+    return '<div class="item"><div><b>'+fmtMac(m.mac)+'</b><small>'+(m.ts||'')+(m.usuario?(' · '+m.usuario):'')+'</small></div>'
       +'<button class="btn sec" style="margin:0;padding:6px 10px" onclick="quitarMacSerial(\''+m.mac+'\')">Quitar</button></div>';
   }).join('');
 }
@@ -2239,19 +2275,44 @@ function agregarMacSerial(mac){
   cantSerialEstado_('Agregando…');
   gs('agregarMacRack',{id:cantActual.id,mac:mac,usuario:cantSerialUsuario_()}).then(function(r){
     if(r.ya) cantSerialEstado_('Esa MAC ya estaba aquí');
-    else { cantSerialEstado_('✔ +1 · '+(r.mac||mac)); beep(880); }
+    else { cantSerialEstado_('✔ +1 · '+fmtMac(r.mac||mac)); beep(880); }
     cargarMacsRack(cantActual.id);
   }).catch(function(e){ cantSerialEstado_(String(e.message||e),true); });
 }
 function quitarMacSerial(mac){
   if(!cantActual) return;
-  if(!confirm('¿Quitar la MAC '+mac+' de esta ubicación?')) return;
+  if(!confirm('¿Quitar la MAC '+fmtMac(mac)+' de esta ubicación?')) return;
   cantSerialEstado_('Quitando…');
   gs('quitarMacRack',{id:cantActual.id,mac:mac,usuario:cantSerialUsuario_()}).then(function(){
     cantSerialEstado_('✔ −1'); beep(440); cargarMacsRack(cantActual.id);
   }).catch(function(e){ cantSerialEstado_(String(e.message||e),true); });
 }
-if($('cantSerialScan')) $('cantSerialScan').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); agregarMacSerial(this.value); this.value=''; });
+// Modo del escaneo: 'add' suma la MAC escaneada, 'del' la resta.
+var cantSerialModo='add';
+function cantSerialResetModo_(){
+  cantSerialModo='add';
+  Array.prototype.forEach.call(document.querySelectorAll('#cantSerialModoSeg button'),function(x){ x.classList.toggle('on', x.dataset.m==='add'); });
+  var inp=$('cantSerialScan'); if(inp) inp.placeholder='Escanea o pega una MAC y Enter…';
+}
+Array.prototype.forEach.call(document.querySelectorAll('#cantSerialModoSeg button'),function(b){
+  b.onclick=function(){
+    cantSerialModo=b.dataset.m;
+    Array.prototype.forEach.call(document.querySelectorAll('#cantSerialModoSeg button'),function(x){x.classList.toggle('on',x===b);});
+    var inp=$('cantSerialScan'); if(inp){ inp.placeholder=(cantSerialModo==='del')?'Escanea una MAC para QUITARLA…':'Escanea o pega una MAC y Enter…'; inp.focus(); }
+    cantSerialEstado_(cantSerialModo==='del'?'Modo QUITAR: cada MAC que escanees se resta':'Modo AGREGAR: cada MAC que escanees se suma');
+  };
+});
+function cantSerialEntrada(v){ if(cantSerialModo==='del') quitarMacPorEscaneo(v); else agregarMacSerial(v); }
+function quitarMacPorEscaneo(mac){
+  mac=String(mac||'').trim(); if(!mac||!cantActual) return;
+  cantSerialEstado_('Quitando…');
+  gs('quitarMacRack',{id:cantActual.id,mac:mac,usuario:cantSerialUsuario_()}).then(function(r){
+    if(r.noEstaba) cantSerialEstado_('Esa MAC no estaba en esta ubicación',true);
+    else { cantSerialEstado_('✔ −1 · '+fmtMac(mac)); beep(440); }
+    cargarMacsRack(cantActual.id);
+  }).catch(function(e){ cantSerialEstado_(String(e.message||e),true); });
+}
+if($('cantSerialScan')) $('cantSerialScan').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); cantSerialEntrada(this.value); this.value=''; });
 function pararCantSerialScan(){
   if(cantSerialCam){ try{cantSerialCam.stop().then(function(){cantSerialCam.clear();});}catch(e){} cantSerialCam=null; }
   var d=$('cantSerialLector'); if(d) d.classList.add('hide'); if($('btnCantSerialCam')) $('btnCantSerialCam').textContent='📷 Escanear MAC con cámara';
@@ -2262,7 +2323,7 @@ if($('btnCantSerialCam')) $('btnCantSerialCam').onclick=function(){
   div.classList.remove('hide'); $('btnCantSerialCam').textContent='⏹ Detener cámara';
   cantSerialCam=new Html5Qrcode('cantSerialLector');
   cantSerialCam.start({facingMode:'environment'},{fps:8,qrbox:{width:220,height:220}},
-    function(texto){ agregarMacSerial(texto); },
+    function(texto){ cantSerialEntrada(texto); },
     function(){}
   ).catch(function(e){ pararCantSerialScan(); toast('No pude abrir la cámara: '+String(e&&e.message||e),true); });
 };
@@ -2270,7 +2331,7 @@ if($('btnCantSerialQR')) $('btnCantSerialQR').onclick=function(){
   if(!cantActual) return;
   if(!cantSerialMacs.length){ toast('No hay MAC para generar el QR',true); return; }
   var box=$('cantSerialQR'); box.innerHTML=''; box.classList.remove('hide');
-  var macs=cantSerialMacs.map(function(m){ return m.mac; });
+  var macs=cantSerialMacs.map(function(m){ return fmtMac(m.mac); });
   var texto='OGUAMACS|'+cantActual.id+'|'+macs.join(',');
   if(texto.length>2800){ box.innerHTML='<div style="color:var(--warn)">Demasiadas MAC ('+macs.length+') para un solo QR legible. Reparte la ubicación o usa el listado.</div>'; return; }
   try{
@@ -2481,8 +2542,7 @@ function celdaEtiqueta_(d,p,left,top){
   var cv=tmp.querySelector('canvas');
   var img=cv?('<img src="'+cv.toDataURL('image/png')+'" style="width:'+q+'mm;height:'+q+'mm">'):'';
   cell.innerHTML='<div class="rq" style="padding-left:1.5mm">'+img+'</div><div class="rt" style="padding:0 1.5mm">'
-    +'<div class="ru" style="font-size:'+fU+'pt">'+d.ubicacion+'</div>'
-    +'<div class="rc" style="font-size:'+fI+'pt">'+(d.codigo?d.codigo+' · ':'')+d.nombre+'</div></div>';
+    +'<div class="ru" style="font-size:'+fU+'pt">'+d.ubicacion+'</div></div>';
   return cell;
 }
 if($('btnImprimirHoja')) $('btnImprimirHoja').onclick=function(){
