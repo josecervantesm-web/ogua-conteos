@@ -576,7 +576,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-n</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-o</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -823,7 +823,7 @@ function cargarMacs(){
   gs('getMacs',q).then(function(rows){
     if(!rows.length){ body.innerHTML="<tr><td colspan='7' style='color:var(--mut)'>Sin MACs registradas.</td></tr>"; $('macResumen').textContent=''; return; }
     body.innerHTML=rows.map(function(m){
-      var mac=m.mac.replace(/(..)(?=.)/g,"$1:");
+      var mac=fmtMac(m.mac);
       var ubi=m.posicion?m.posicion:"<span style='color:var(--warn)'>— sin ubicación</span>";
       return "<tr><td style='font-family:monospace'>"+mac+"</td><td>"+ubi+"</td><td>"+(m.nombre||m.codigo||"")+"</td><td>"+(m.bodega||m.zona||"")+"</td><td>"+(m.numConteo||"")+"</td><td>"+(m.usuario||"")+"</td><td>"+(m.timestamp||"")+"</td></tr>";
     }).join("");
@@ -1106,9 +1106,9 @@ function pintarCaptura(){
   $('detalleCant').textContent = savedQty+' guardadas + '+nuevas+' nuevas'+(conteoCerrado?' · 🔒 CERRADO':'');
   var _si=$('scan'); if(_si) _si.placeholder=(sel && esMacLibre(sel))?'Escanea aquí… (formato libre)':'Escanea aquí…';
   $('macs').innerHTML = savedMacs.map(function(m){
-    return '<span class="macchip saved" title="'+(m.pos||'sin ubicación')+'">✓ '+m.mac.replace(/(..)(?=.)/g,'$1:')+(m.pos?(' · '+m.pos):'')+'</span>';
+    return '<span class="macchip saved" title="'+(m.pos||'sin ubicación')+'">✓ '+fmtMac(m.mac)+(m.pos?(' · '+m.pos):'')+'</span>';
   }).concat(macsSesion.map(function(m){
-    return '<span class="macchip" title="'+(m.pos||'sin ubicación')+'">'+m.mac.replace(/(..)(?=.)/g,'$1:')+(m.pos?(' · '+m.pos):'')+'</span>';
+    return '<span class="macchip" title="'+(m.pos||'sin ubicación')+'">'+fmtMac(m.mac)+(m.pos?(' · '+m.pos):'')+'</span>';
   })).join('');
   persistirSesion();
 }
@@ -1632,7 +1632,9 @@ var impLente='falt';     // pestaña de resultado activa
 var _impChk=false;       // ya se ofreció recuperar importación sin cerrar
 
 function normMacImp(s){ var t=String(s||'').toUpperCase().replace(/[^0-9A-F]/g,''); return t||''; }
-function fmtMac(v){ return String(v||'').replace(/(..)(?=.)/g,'$1:'); }
+// Muestra una MAC como XX:XX:XX:XX:XX:XX sin importar cómo venga (con o sin ':' '-' '.').
+// Si no es una MAC (p.ej. seriales 5GT-2S+_FB…), la deja tal cual.
+function fmtMac(v){ var s=String(v==null?'':v).trim(); var h=s.replace(/[\s:\-.]/g,'').toUpperCase(); return /^[0-9A-F]{12}$/.test(h)?h.replace(/(..)(?=.)/g,'$1:'):s; }
 
 // Extrae las MACs esperadas de un libro de Excel.
 // Consciente de la estructura: recorre TODAS las filas y, cada vez que aparece una fila de
