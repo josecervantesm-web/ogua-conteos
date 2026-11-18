@@ -445,6 +445,18 @@
   <!-- ================= MACs ================= -->
   <section id="v-macs" class="hide">
     <div class="card">
+      <h2>🖨️ QR de MAC para imprimir</h2>
+      <p style="color:var(--mut);font-size:12px">Un QR por cada MAC registrada, en hoja carta lista para imprimir. Cada QR guarda solo la MAC.</p>
+      <div class="row">
+        <div><label>MAC de</label><select id="qmFuente"><option value="racks">Racks (MAC en ubicaciones)</option><option value="conteos">Conteos</option><option value="todas">Racks y conteos</option></select></div>
+        <div><label>Tamaño</label><select id="qmTam"><option value="g">Grande · 15 por hoja</option><option value="n">Normal · 24 por hoja</option><option value="x" selected>50 por hoja</option></select></div>
+      </div>
+      <label>Filtrar (opcional)</label>
+      <input id="qmFiltro" placeholder="Bodega, ubicación, artículo o MAC…" autocomplete="off">
+      <button class="btn" id="btnQmPDF">📄 Generar PDF con los QR</button>
+      <div id="qmEstado" style="font-size:12px;color:var(--mut);margin-top:6px;text-align:center"></div>
+    </div>
+    <div class="card">
       <h2>MACs y su ubicación</h2>
       <p style="color:var(--mut);font-size:12px">Cada MAC escaneada con la ubicación donde se registró.</p>
       <input id="macBuscar" placeholder="Buscar por MAC, artículo, zona o ubicación…" autocomplete="off">
@@ -576,7 +588,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-o</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-q</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -606,6 +618,8 @@
         <div id="cantSerialEstado" style="text-align:center;font-size:12px;min-height:16px;margin-top:4px"></div>
         <button class="btn sec" id="btnCantSerialQR" style="margin-top:8px">🔳 Generar QR con las MAC</button>
         <div id="cantSerialQR" class="hide" style="text-align:center;margin-top:10px"></div>
+        <button class="btn sec" id="btnCantSerialPDF" style="margin-top:8px">🖨️ PDF con un QR por cada MAC</button>
+        <div id="cantSerialPDFEst" style="font-size:12px;color:var(--mut);margin-top:6px;text-align:center"></div>
         <div class="list" id="cantSerialList" style="margin-top:10px"></div>
       </div>
     </div>
@@ -2233,11 +2247,13 @@ function consultarCantUI(code){
   gs('consultarRack',code).then(function(r){
     if(!r.found){ $('cantInfo').innerHTML='<div class="item" style="color:var(--warn)">No encontré ningún rack con ese código ('+r.id+'). Si es una etiqueta vieja, vuelve a generarla.</div>'; cantActual=null; cargarCantMovs(''); return; }
     var cCant=r.campos.filter(function(c){ return c.clave==='cantidad'; })[0];
-    cantActual={id:r.id, cantidad:Number(cCant?cCant.valor:0)||0, serializado:!!r.serializado};
+    var cv=function(k){ var c=r.campos.filter(function(x){ return x.clave===k; })[0]; return c?String(c.valor||''):''; };
+    cantActual={id:r.id, cantidad:Number(cCant?cCant.valor:0)||0, serializado:!!r.serializado, ubicacion:cv('ubicacion'), articulo:cv('nombre')||cv('codigo')};
     cantPend=0; cantSending=false; cantEstado_('');
     pintarCantInfo(r);
     if(r.serializado){
       if($('cantSerialQR')){ $('cantSerialQR').classList.add('hide'); $('cantSerialQR').innerHTML=''; }
+      if($('cantSerialPDFEst')) $('cantSerialPDFEst').innerHTML='';
       cantSerialEstado_('');
       if(typeof cantSerialResetModo_==='function') cantSerialResetModo_();
       $('cantSerial').classList.remove('hide');
@@ -2338,7 +2354,7 @@ if($('btnCantSerialQR')) $('btnCantSerialQR').onclick=function(){
   var macs=cantSerialMacs.map(function(m){ return fmtMac(m.mac); });
   // Se parte en grupos pequeños: un QR con muchas MAC queda demasiado denso para leerlo
   // desde una pantalla. Cada QR va grande y con borde blanco (zona de silencio) para que lea fácil.
-  var POR=40;
+  var POR=50;
   var grupos=[]; for(var i=0;i<macs.length;i+=POR){ grupos.push(macs.slice(i,i+POR)); }
   if(grupos.length>1){
     var head=document.createElement('div'); head.style.cssText='font-size:12px;color:var(--mut);margin-bottom:8px';
@@ -2356,6 +2372,90 @@ if($('btnCantSerialQR')) $('btnCantSerialQR').onclick=function(){
     wrap.appendChild(qd);
     box.appendChild(wrap);
   });
+};
+// ---- PDF con un QR por cada MAC (hoja carta en cuadrícula, para imprimir) ----
+var _pdfProm=null;
+function cargarJsPDF_(){
+  if(window.jspdf&&window.jspdf.jsPDF) return Promise.resolve();
+  if(_pdfProm) return _pdfProm;
+  _pdfProm=new Promise(function(res,rej){
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.async=true; s.onload=function(){ res(); };
+    s.onerror=function(){ _pdfProm=null; rej(new Error('No se pudo descargar el generador de PDF')); };
+    document.head.appendChild(s);
+  });
+  return _pdfProm;
+}
+var QM_TAM={g:{c:3,f:5},n:{c:4,f:6},x:{c:5,f:10}};
+function qrMacPNG_(txt){
+  var d=document.createElement('div');
+  new QRCode(d,{text:txt,width:256,height:256,correctLevel:QRCode.CorrectLevel.M});
+  var c=d.querySelector('canvas'); if(c) return c.toDataURL('image/png');
+  var im=d.querySelector('img'); return im?im.src:'';
+}
+// items: [{mac, l2}] → genera y descarga el PDF. opt: {tam:'g'|'n'|'p', titulo, archivo}
+function pdfQrMacs_(items,opt){
+  opt=opt||{};
+  return cargarJsPDF_().then(function(){ return new Promise(function(r){ setTimeout(r,40); }); }).then(function(){
+    var doc=new window.jspdf.jsPDF({unit:'mm',format:'letter',orientation:'portrait'});
+    var PW=215.9, PH=279.4, T=QM_TAM[opt.tam]||QM_TAM.x, M=8, D=T.f>=10, TOP=D?12:14, BOT=D?8:11, PAD=D?1.2:2.5;
+    var cw=(PW-2*M)/T.c, ch=(PH-TOP-BOT)/T.f, porHoja=T.c*T.f, PT=0.3528;
+    var fMac=T.c>=5?7:(T.c===4?9:11), fL2=T.c>=5?5:(T.c===4?6.5:8);
+    var q=Math.min(cw-6, ch-PAD-fMac*PT-fL2*PT-(D?3:4.5));
+    var hojas=Math.ceil(items.length/porHoja), fecha=new Date().toLocaleDateString('es-CO');
+    function corta(s,w){ s=String(s||''); if(doc.getTextWidth(s)<=w) return s; while(s.length>1&&doc.getTextWidth(s+'…')>w) s=s.slice(0,-1); return s+'…'; }
+    function cabecera(h){
+      doc.setLineDashPattern([],0); doc.setTextColor(70);
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(corta(opt.titulo||'QR de MAC',PW-2*M-60),M,9);
+      doc.setFont('helvetica','normal'); doc.text(items.length+' MAC · '+fecha+' · Hoja '+h+'/'+hojas,PW-M,9,{align:'right'});
+    }
+    items.forEach(function(it,i){
+      var k=i%porHoja;
+      if(k===0){ if(i) doc.addPage(); cabecera(i/porHoja+1); }
+      var x=M+(k%T.c)*cw, y=TOP+Math.floor(k/T.c)*ch, mac=fmtMac(it.mac);
+      doc.setDrawColor(200); doc.setLineWidth(0.15); doc.setLineDashPattern([1,1],0); doc.rect(x,y,cw,ch);
+      var png=qrMacPNG_(mac); if(png) doc.addImage(png,'PNG',x+(cw-q)/2,y+PAD,q,q);
+      var yb=y+PAD+q+fMac*PT+0.6;
+      doc.setFont('courier','bold'); doc.setFontSize(fMac); doc.setTextColor(0);
+      doc.text(corta(mac,cw-3),x+cw/2,yb,{align:'center'});
+      if(it.l2){ doc.setFont('helvetica','normal'); doc.setFontSize(fL2); doc.setTextColor(90);
+        doc.text(corta(it.l2,cw-3),x+cw/2,yb+fL2*PT+1,{align:'center'}); }
+    });
+    var nombre=String(opt.archivo||'QR-MAC').replace(/[^\w\-]+/g,'_')+'.pdf';
+    var blob=doc.output('blob');
+    try{ doc.save(nombre); }catch(e){}
+    return {url:URL.createObjectURL(blob), nombre:nombre, hojas:hojas, total:items.length};
+  });
+}
+function pdfListo_(el,r){
+  el.innerHTML='✔ PDF listo: <b>'+r.total+'</b> QR en <b>'+r.hojas+'</b> hoja(s). Si no se descargó solo, <a href="'+r.url+'" target="_blank" rel="noopener" style="color:var(--acc);font-weight:700">ábrelo aquí</a>.';
+}
+if($('btnCantSerialPDF')) $('btnCantSerialPDF').onclick=function(){
+  if(!cantActual) return;
+  if(!cantSerialMacs.length){ toast('No hay MAC en este rack',true); return; }
+  var b=this, est=$('cantSerialPDFEst'), ub=cantActual.ubicacion||cantActual.id;
+  var items=cantSerialMacs.map(function(m){ return {mac:m.mac, l2:ub}; })
+    .sort(function(a,c){ var x=fmtMac(a.mac), y=fmtMac(c.mac); return x<y?-1:x>y?1:0; });
+  b.disabled=true; est.textContent='Generando '+items.length+' QR…';
+  pdfQrMacs_(items,{tam:'x', titulo:'QR de MAC · '+ub+(cantActual.articulo?' · '+cantActual.articulo:''), archivo:'QR-MAC-'+ub})
+    .then(function(r){ pdfListo_(est,r); })
+    .catch(function(e){ est.textContent=''; toast(String(e&&e.message||e),true); })
+    .then(function(){ b.disabled=false; });
+};
+if($('btnQmPDF')) $('btnQmPDF').onclick=function(){
+  var b=this, est=$('qmEstado'), fuente=$('qmFuente').value, filtro=$('qmFiltro').value.trim();
+  b.disabled=true; est.textContent='Buscando MAC…';
+  gs('listarMacsQR',{fuente:fuente, filtro:filtro}).then(function(rows){
+    rows=rows||[];
+    if(!rows.length){ est.textContent='No hay MAC registradas'+(filtro?' con ese filtro':'')+'.'; return; }
+    est.textContent='Generando '+rows.length+' QR…';
+    var items=rows.map(function(m){ return {mac:m.mac, l2:[m.ubicacion,m.articulo].filter(Boolean).join(' · ')}; });
+    var nom={racks:'racks',conteos:'conteos',todas:'racks y conteos'}[fuente]||fuente;
+    return pdfQrMacs_(items,{tam:$('qmTam').value, titulo:'QR de MAC · '+nom+(filtro?' · "'+filtro+'"':''), archivo:'QR-MAC-'+fuente+(filtro?'-'+filtro:'')})
+      .then(function(r){ pdfListo_(est,r); });
+  }).catch(function(e){ est.textContent=''; toast(String(e&&e.message||e),true); })
+    .then(function(){ b.disabled=false; });
 };
 if($('cantConsulta')) $('cantConsulta').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); consultarCantUI(this.value); this.value=''; });
 function pararCantScan(){
