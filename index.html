@@ -380,7 +380,15 @@
     </div>
     <div class="card">
       <h2>Bodegas y ubicaciones</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Las bodegas son fijas: <b id="zonasList"></b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Bodegas activas: <b id="zonasList"></b></p>
+      <div class="list" id="bodList" style="margin-bottom:8px"></div>
+      <label id="bodFormTit">Agregar bodega</label>
+      <input id="bodNombre" placeholder="Nombre que verá el equipo. Ej: Cali" autocomplete="off">
+      <input id="bodWid" placeholder="warehouse_id en Metabase (opcional)" autocomplete="off">
+      <input id="bodAlias" placeholder="Otros nombres, separados por coma (opcional)" autocomplete="off">
+      <button class="btn sec" id="btnBodGuardar">＋ Agregar bodega</button>
+      <button class="btn sec hide" id="btnBodCancelar">✖ Cancelar edición</button>
+      <p style="color:var(--mut);font-size:11px;margin:6px 0 12px">Si dejas vacío el warehouse_id se usa el nombre; debe coincidir con la columna H de "Inventario disponible" para que el comparativo traiga el stock del sistema. Quitar una bodega solo la oculta de las listas: sus racks, conteos y MAC se conservan y puedes reactivarla cuando quieras.</p>
       <label>Nueva ubicación dentro de una bodega</label>
       <div class="row">
         <select id="ubiBodega"></select>
@@ -588,7 +596,7 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-q</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-r</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
@@ -793,7 +801,7 @@ function iniciar(){
     var zg=localStorage.getItem('ogua_zona')||'';
     if(zg && bods.indexOf(zg)>=0) zonaSel.value=zg;
     pintarUbicaciones(); pintarUbiList();
-    $('zonasList').textContent=bods.join(' · ');
+    $('zonasList').textContent=bods.join(' · '); if(typeof pintarBodegas_==='function') pintarBodegas_(b.bodegasConf||[]);
     $('usuario').value = localStorage.getItem('ogua_user')||'';
     $('conUrl').value=API.url; $('conTok').value=API.token;
     pintarEtList();
@@ -2457,6 +2465,68 @@ if($('btnQmPDF')) $('btnQmPDF').onclick=function(){
   }).catch(function(e){ est.textContent=''; toast(String(e&&e.message||e),true); })
     .then(function(){ b.disabled=false; });
 };
+// ---- Bodegas configurables (pestaña Config) ----
+var BOD_LISTA=[], BOD_EDIT=null;
+function escB_(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function pintarBodegas_(lista){
+  BOD_LISTA=lista||[]; var el=$('bodList'); if(!el) return;
+  if(!BOD_LISTA.length){ el.innerHTML='<div class="item" style="color:var(--mut)">Sin bodegas.</div>'; return; }
+  el.innerHTML=BOD_LISTA.map(function(b,i){
+    var extra='warehouse_id: <b>'+escB_(b.wid)+'</b>'+(b.alias&&b.alias.length?' · también: '+escB_(b.alias.join(', ')):'');
+    return '<div class="item" style="'+(b.activa?'':'opacity:.55')+'"><div style="flex:1;min-width:0"><b>'+escB_(b.nombre)+'</b>'+
+      (b.activa?'':' <span style="color:var(--warn);font-size:11px">(quitada)</span>')+'<small>'+extra+'</small></div>'+
+      '<div style="display:flex;gap:6px;flex:0 0 auto"><button class="mini" data-bod-ed="'+i+'">✏️</button>'+
+      (b.activa?'<button class="mini" data-bod-q="'+i+'" style="color:var(--err)">Quitar</button>'
+               :'<button class="mini" data-bod-r="'+i+'" style="color:var(--ok)">Reactivar</button>')+'</div></div>';
+  }).join('');
+}
+function llenarSelectsBodegas_(bods){
+  bods=bods||[];
+  [['zona','Elige bodega…'],['pendZona','Todas las bodegas'],['compZona','Todas las bodegas'],['impBodega','Elige bodega…'],
+   ['rackBodega','Elige bodega…'],['ubicBodega','Todas las bodegas'],['auditBodega','Elige bodega…'],['estAudZona','Todas las bodegas'],['ubiBodega',null]]
+  .forEach(function(c){
+    var s=$(c[0]); if(!s) return; var v=s.value;
+    s.innerHTML=c[1]?'<option value="">'+c[1]+'</option>':'';
+    bods.forEach(function(z){ s.appendChild(new Option(z,z)); });
+    if(v && bods.indexOf(v)>=0) s.value=v;
+  });
+  if(window.BOOT) BOOT.bodegas=bods;
+  if($('zonasList')) $('zonasList').textContent=bods.join(' · ');
+  if(typeof pintarUbicaciones==='function') pintarUbicaciones();
+  if(typeof pintarUbiList==='function') pintarUbiList();
+}
+function bodFormReset_(){
+  BOD_EDIT=null; ['bodNombre','bodWid','bodAlias'].forEach(function(id){ if($(id)) $(id).value=''; });
+  if($('bodFormTit')) $('bodFormTit').textContent='Agregar bodega';
+  if($('btnBodGuardar')) $('btnBodGuardar').textContent='＋ Agregar bodega';
+  if($('btnBodCancelar')) $('btnBodCancelar').classList.add('hide');
+}
+function bodAplicar_(r,msg){ pintarBodegas_(r.bodegas); llenarSelectsBodegas_(r.activas); bodFormReset_(); if(msg) toast(msg); }
+if($('btnBodGuardar')) $('btnBodGuardar').onclick=function(){
+  var b=this, nom=$('bodNombre').value.trim();
+  if(!nom){ toast('Escribe el nombre de la bodega',true); return; }
+  b.disabled=true;
+  gs('guardarBodega',{nombre:nom, wid:$('bodWid').value.trim(), alias:$('bodAlias').value.trim(), original:BOD_EDIT||''})
+    .then(function(r){ bodAplicar_(r, BOD_EDIT?'Bodega actualizada':'Bodega "'+nom+'" agregada'); })
+    .catch(function(e){ toast(String(e&&e.message||e),true); })
+    .then(function(){ b.disabled=false; });
+};
+if($('btnBodCancelar')) $('btnBodCancelar').onclick=bodFormReset_;
+if($('bodList')) $('bodList').addEventListener('click',function(ev){
+  var t=ev.target.closest('button'); if(!t) return;
+  var i=t.getAttribute('data-bod-ed')||t.getAttribute('data-bod-q')||t.getAttribute('data-bod-r'); var b=BOD_LISTA[+i]; if(!b) return;
+  if(t.hasAttribute('data-bod-ed')){
+    BOD_EDIT=b.wid; $('bodNombre').value=b.nombre; $('bodWid').value=b.wid; $('bodAlias').value=(b.alias||[]).join(', ');
+    $('bodFormTit').textContent='Editar bodega: '+b.nombre; $('btnBodGuardar').textContent='💾 Guardar cambios';
+    $('btnBodCancelar').classList.remove('hide'); $('bodNombre').focus(); return;
+  }
+  var quitar=t.hasAttribute('data-bod-q');
+  if(quitar && !confirm('¿Quitar la bodega "'+b.nombre+'"?\n\nDejará de salir en las listas de la app. Sus racks, conteos y MAC se conservan y puedes reactivarla después.')) return;
+  t.disabled=true;
+  gs(quitar?'quitarBodega':'reactivarBodega',{wid:b.wid})
+    .then(function(r){ bodAplicar_(r, quitar?'Bodega "'+b.nombre+'" quitada':'Bodega "'+b.nombre+'" reactivada'); })
+    .catch(function(e){ t.disabled=false; toast(String(e&&e.message||e),true); });
+});
 if($('cantConsulta')) $('cantConsulta').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); consultarCantUI(this.value); this.value=''; });
 function pararCantScan(){
   var div=$('cantScanLector');
