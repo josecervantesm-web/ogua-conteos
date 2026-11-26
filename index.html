@@ -540,6 +540,25 @@
   <!-- ================= RACKS ================= -->
   <section id="v-rack" class="hide">
     <div class="card">
+      <h2>⚡ Crear ubicaciones en lote</h2>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escribe Rack, Módulo y Nivel tal como deben quedar y cuántas posiciones tiene ese nivel. Se crea una ubicación por posición, cada una con su QR, y quedan con el <b>artículo por definir</b>. Después las agregas a la hoja de impresión como siempre.</p>
+      <label>Bodega</label>
+      <select id="loteBodega"><option value="">Elige bodega…</option></select>
+      <div class="row">
+        <div><label>Rack</label><input id="loteRack" placeholder="Ej: H03" autocomplete="off" autocapitalize="characters"></div>
+        <div><label>Módulo</label><input id="loteMod" placeholder="Ej: PH" autocomplete="off" autocapitalize="characters"></div>
+        <div><label>Nivel</label><input id="loteNiv" placeholder="Ej: N3" autocomplete="off" autocapitalize="characters"></div>
+      </div>
+      <div class="row">
+        <div><label>Prefijo posición</label><input id="lotePre" placeholder="Ej: P (opcional)" autocomplete="off" autocapitalize="characters"></div>
+        <div><label>Desde la posición</label><input id="loteDesde" type="number" min="0" value="1" inputmode="numeric"></div>
+        <div><label>N.º de posiciones</label><input id="loteN" type="number" min="1" max="200" placeholder="Ej: 4" inputmode="numeric"></div>
+      </div>
+      <div id="lotePrev" style="font-size:12px;color:var(--mut);margin-top:8px;min-height:16px"></div>
+      <button class="btn" id="btnLoteCrear">⚡ Crear ubicaciones</button>
+      <div id="loteRes" style="font-size:12px;margin-top:8px"></div>
+    </div>
+    <div class="card">
       <h2>🏷 Etiquetar rack</h2>
       <div class="row">
         <div><label>Bodega</label><select id="rackBodega"><option value="">Elige bodega…</option></select></div>
@@ -587,6 +606,7 @@
         <button data-v="todas" class="on">Todas</button>
         <button data-v="sin">Sin imprimir</button>
         <button data-v="impresas">Impresas</button>
+        <button data-v="pordef">Por definir</button>
       </div>
       <div class="list" id="rackHist" style="margin-top:8px"></div>
     </div>
@@ -596,11 +616,22 @@
   <section id="v-cant">
     <div class="card">
       <h2>🔢 Cantidad en ubicación</h2>
-      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-r</b></p>
+      <p style="color:var(--mut);font-size:12px;margin:0 0 6px">Escanea el QR del rack para ver y ajustar la cantidad disponible en esa ubicación. <b style="color:#1b8a3a">· Build 22-sep-s</b></p>
       <input id="cantConsulta" placeholder="Escanea aquí o pega el código…" autocomplete="off" autocapitalize="off">
       <button class="btn sec" id="btnCantScan">📷 Escanear con cámara</button>
       <div id="cantScanLector" class="hide" style="width:100%;border-radius:12px;overflow:hidden;margin-top:8px"></div>
       <div id="cantInfo" style="margin-top:10px"></div>
+      <div id="cantAsignar" class="hide" style="margin-top:12px;border:1px dashed var(--warn);border-radius:12px;padding:12px">
+        <div style="font-weight:700;color:var(--warn)">⏳ Esta ubicación todavía no tiene artículo</div>
+        <label>Asignar artículo (busca por nombre o código Artemis)</label>
+        <div class="sug">
+          <input id="cantAsigBuscar" placeholder="Buscar artículo…" autocomplete="off">
+          <div class="opts hide" id="cantAsigOpts"></div>
+        </div>
+        <div id="cantAsigSel" class="hide" style="margin-top:8px"><b id="cantAsigNombre"></b><br><small id="cantAsigCodigo" style="color:var(--mut)"></small></div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer"><input type="checkbox" id="cantAsigSerial" style="width:auto;flex:0 0 auto"> Artículo individualizable (se cuenta escaneando cada MAC)</label>
+        <button class="btn" id="btnCantAsignar">✔ Asignar a esta ubicación</button>
+      </div>
       <div id="cantAjuste" class="hide" style="margin-top:16px">
         <div class="qty">
           <button type="button" id="btnCantMenos">−</button>
@@ -801,7 +832,7 @@ function iniciar(){
     var zg=localStorage.getItem('ogua_zona')||'';
     if(zg && bods.indexOf(zg)>=0) zonaSel.value=zg;
     pintarUbicaciones(); pintarUbiList();
-    $('zonasList').textContent=bods.join(' · '); if(typeof pintarBodegas_==='function') pintarBodegas_(b.bodegasConf||[]);
+    $('zonasList').textContent=bods.join(' · '); if(typeof pintarBodegas_==='function') pintarBodegas_(b.bodegasConf||[]); if(typeof copiarBodegasLote_==='function') copiarBodegasLote_();
     $('usuario').value = localStorage.getItem('ogua_user')||'';
     $('conUrl').value=API.url; $('conTok').value=API.token;
     pintarEtList();
@@ -2118,17 +2149,18 @@ function pintarRacks(){
     var imp=(r.impresiones||0)>0;
     if(rackVer==='sin' && imp) return;
     if(rackVer==='impresas' && !imp) return;
+    if(rackVer==='pordef' && (r.nombre||r.codigo)) return;
     var badge= imp
       ? '<span style="background:#153f27;color:#5fe39a;border-radius:99px;padding:2px 8px;font-size:10.5px;font-weight:700">🖨 '+r.impresiones+(r.ultimaImpresion?(' · '+r.ultimaImpresion):'')+'</span>'
       : '<span style="background:var(--card2);color:var(--mut);border-radius:99px;padding:2px 8px;font-size:10.5px;font-weight:700">sin imprimir</span>';
-    rows.push('<div class="item"><div><b>'+r.ubicacion+'</b><small>'+(r.codigo?r.codigo+' · ':'')+r.nombre+(r.bodega?(' · '+r.bodega):'')+' · '+r.fecha+' · '+badge+'</small></div>'
+    rows.push('<div class="item"><div><b>'+r.ubicacion+'</b><small>'+(r.codigo?r.codigo+' · ':'')+(r.nombre||'<span style="color:var(--warn)">⏳ artículo por definir</span>')+(r.bodega?(' · '+r.bodega):'')+' · '+r.fecha+' · '+badge+'</small></div>'
       +'<div style="display:flex;gap:6px;flex:0 0 auto">'
       +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="editarRackHist('+i+')">✏️</button>'
       +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="reimprimirRack('+i+')">🏷</button>'
       +'<button class="btn sec" style="margin-top:0;padding:5px 9px;width:auto" onclick="agregarHojaHist('+i+')">➕ Hoja</button>'
       +'</div></div>');
   });
-  $('rackHist').innerHTML=rows.join('')||'<div class="item" style="color:var(--mut)">No hay racks '+(rackVer==='sin'?'sin imprimir':'impresos')+'.</div>';
+  $('rackHist').innerHTML=rows.join('')||'<div class="item" style="color:var(--mut)">No hay racks '+({sin:'sin imprimir',impresas:'impresos',pordef:'con artículo por definir'}[rackVer]||'')+'.</div>';
 }
 Array.prototype.forEach.call(document.querySelectorAll('#rackVerSeg button'),function(b){ b.onclick=function(){ rackVer=b.dataset.v; Array.prototype.forEach.call(document.querySelectorAll('#rackVerSeg button'),function(x){x.classList.toggle('on',x===b);}); pintarRacks(); }; });
 function marcarImpresoUI(ids){
@@ -2259,6 +2291,8 @@ function consultarCantUI(code){
     cantActual={id:r.id, cantidad:Number(cCant?cCant.valor:0)||0, serializado:!!r.serializado, ubicacion:cv('ubicacion'), articulo:cv('nombre')||cv('codigo')};
     cantPend=0; cantSending=false; cantEstado_('');
     pintarCantInfo(r);
+    if($('cantAsignar')) $('cantAsignar').classList.add('hide');
+    if(!cantActual.articulo && $('cantAsignar')){ mostrarAsignarCant_(); cargarCantMovs(''); beep(660); return; }
     if(r.serializado){
       if($('cantSerialQR')){ $('cantSerialQR').classList.add('hide'); $('cantSerialQR').innerHTML=''; }
       if($('cantSerialPDFEst')) $('cantSerialPDFEst').innerHTML='';
@@ -2494,6 +2528,7 @@ function llenarSelectsBodegas_(bods){
   if($('zonasList')) $('zonasList').textContent=bods.join(' · ');
   if(typeof pintarUbicaciones==='function') pintarUbicaciones();
   if(typeof pintarUbiList==='function') pintarUbiList();
+  if(typeof copiarBodegasLote_==='function') copiarBodegasLote_();
 }
 function bodFormReset_(){
   BOD_EDIT=null; ['bodNombre','bodWid','bodAlias'].forEach(function(id){ if($(id)) $(id).value=''; });
@@ -2527,6 +2562,66 @@ if($('bodList')) $('bodList').addEventListener('click',function(ev){
     .then(function(r){ bodAplicar_(r, quitar?'Bodega "'+b.nombre+'" quitada':'Bodega "'+b.nombre+'" reactivada'); })
     .catch(function(e){ t.disabled=false; toast(String(e&&e.message||e),true); });
 });
+// ---- Crear ubicaciones en lote (Racks) y asignar artículo escaneando (Cantidad) ----
+function copiarBodegasLote_(){
+  var o=$('rackBodega'), d=$('loteBodega'); if(!o||!d) return;
+  var v=d.value||localStorage.getItem('ogua_lote_bod')||'';
+  d.innerHTML=o.innerHTML;
+  if(v && [].some.call(d.options,function(x){ return x.value===v; })) d.value=v;
+}
+function loteLista_(){
+  var parts=[$('loteRack').value.trim(),$('loteMod').value.trim(),$('loteNiv').value.trim()].filter(Boolean);
+  var pre=$('lotePre').value.trim(), desde=parseInt($('loteDesde').value,10), n=parseInt($('loteN').value,10);
+  if(isNaN(desde)) desde=1;
+  if(!parts.length || !(n>0)) return [];
+  var out=[]; for(var k=0;k<Math.min(n,200);k++) out.push(parts.concat(pre+(desde+k)).join('-'));
+  return out;
+}
+function lotePreview_(){
+  var el=$('lotePrev'); if(!el) return; var L=loteLista_();
+  if(!L.length){ el.textContent='Escribe al menos el Rack y el número de posiciones.'; return; }
+  el.innerHTML='Se crearán <b>'+L.length+'</b>: '+escB_(L.length<=4?L.join(', '):(L.slice(0,2).join(', ')+', … , '+L[L.length-1]))+
+    (parseInt($('loteN').value,10)>200?' <span style="color:var(--err)">(máximo 200 por vez)</span>':'');
+}
+['loteRack','loteMod','loteNiv','lotePre','loteDesde','loteN'].forEach(function(id){ if($(id)) $(id).addEventListener('input',lotePreview_); });
+if($('loteBodega')){ $('loteBodega').addEventListener('focus',copiarBodegasLote_); $('loteBodega').addEventListener('change',function(){ try{ localStorage.setItem('ogua_lote_bod',this.value); }catch(e){} }); }
+if($('btnLoteCrear')) $('btnLoteCrear').onclick=function(){
+  var b=this, bod=$('loteBodega').value, L=loteLista_(), res=$('loteRes');
+  if(!bod){ toast('Elige la bodega',true); return; }
+  if(!L.length){ toast('Escribe el Rack y el número de posiciones',true); return; }
+  if(L.length>=30 && !confirm('Se van a crear '+L.length+' ubicaciones en '+bod+'.\n\nDe '+L[0]+' a '+L[L.length-1]+'. ¿Continuar?')) return;
+  var usuario=($('usuario')?$('usuario').value.trim():'')||localStorage.getItem('ogua_user')||'';
+  b.disabled=true; b.textContent='Creando '+L.length+'…'; res.textContent='';
+  gs('crearUbicacionesLote',{bodega:bod, ubicaciones:L, usuario:usuario}).then(function(r){
+    (r.creadas||[]).forEach(function(c){ registrarUbicacionLocal(bod,c.ubicacion); });
+    var msg='<span style="color:var(--ok);font-weight:700">✔ '+r.creadas.length+' ubicación(es) creada(s)</span>';
+    if(r.omitidas&&r.omitidas.length) msg+='<br><span style="color:var(--warn)">'+r.omitidas.length+' ya existía(n) y no se repitió: '+escB_(r.omitidas.join(', '))+'</span>';
+    if(r.creadas.length) msg+='<br><span style="color:var(--mut)">Quedan en "Racks etiquetados" (filtro "Por definir") para agregarlas a la hoja.</span>';
+    res.innerHTML=msg; toast(r.creadas.length+' ubicaciones creadas');
+    $('loteNiv').value=''; lotePreview_(); $('loteNiv').focus();
+    cargarRacks();
+  }).catch(function(e){ toast(String(e&&e.message||e),true); })
+    .then(function(){ b.disabled=false; b.textContent='⚡ Crear ubicaciones'; });
+};
+lotePreview_();
+var cantAsigSel=null;
+function mostrarAsignarCant_(){
+  cantAsigSel=null; $('cantAsigBuscar').value=''; $('cantAsigSel').classList.add('hide'); $('cantAsigSerial').checked=false;
+  $('cantAsignar').classList.remove('hide');
+}
+if($('cantAsigBuscar')) autocompletar('cantAsigBuscar','cantAsigOpts',function(it){
+  cantAsigSel=it; $('cantAsigSel').classList.remove('hide');
+  $('cantAsigNombre').textContent=it.n; $('cantAsigCodigo').textContent=(it.c?('Código Artemis: '+it.c):'(artículo sin código)');
+});
+if($('btnCantAsignar')) $('btnCantAsignar').onclick=function(){
+  if(!cantActual) return;
+  if(!cantAsigSel){ toast('Busca y elige el artículo',true); return; }
+  var b=this, id=cantActual.id; b.disabled=true;
+  gs('actualizarRack',{id:id, codigo:cantAsigSel.c||'', nombre:cantAsigSel.n, serializado:$('cantAsigSerial').checked})
+    .then(function(){ toast('Artículo asignado. El QR sigue igual.'); $('cantAsignar').classList.add('hide'); consultarCantUI(id); })
+    .catch(function(e){ toast(String(e&&e.message||e),true); })
+    .then(function(){ b.disabled=false; });
+};
 if($('cantConsulta')) $('cantConsulta').addEventListener('keydown',function(ev){ if(ev.key!=='Enter') return; ev.preventDefault(); consultarCantUI(this.value); this.value=''; });
 function pararCantScan(){
   var div=$('cantScanLector');
